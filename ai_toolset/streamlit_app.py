@@ -60,12 +60,17 @@ def load_yolo(weights):
 
 @st.cache_resource(show_spinner="loading TTS...")
 def load_tts(model_name):
-    from ai_toolset.speech import _coqui_numpy_compat
+    from ai_toolset.speech import ensure_tts_model
 
-    _coqui_numpy_compat()
-    from TTS.api import TTS
+    return ensure_tts_model(model_name)
 
-    return TTS(model_name, gpu=False)
+
+TTS_MODELS = {
+    "tts_models/en/ljspeech/tacotron2-DDC": "LJSpeech Tacotron2 (single speaker, no ref)",
+    "tts_models/en/ljspeech/fast_pitch": "LJSpeech FastPitch (single speaker, no ref)",
+    "tts_models/en/vctk/vits": "VCTK VITS (multi-speaker, no ref)",
+    "tts_models/multilingual/multi-dataset/xtts_v2": "XTTS v2 (voice cloning, needs reference wav)",
+}
 
 
 with tab_stt:
@@ -84,18 +89,21 @@ with tab_stt:
 
 with tab_tts:
     st.subheader("Synthesize speech")
-    tts_models = {
-        "tts_models/en/ljspeech/tacotron2-DDC": "LJSpeech Tacotron2 (single speaker, no ref)",
-        "tts_models/en/ljspeech/fast_pitch": "LJSpeech FastPitch (single speaker, no ref)",
-        "tts_models/en/vctk/vits": "VCTK VITS (multi-speaker, no ref)",
-        "tts_models/multilingual/multi-dataset/xtts_v2": "XTTS v2 (voice cloning, needs reference wav)",
-    }
-    tts_name = st.selectbox("Model", list(tts_models), format_func=lambda m: f"{m}  -  {tts_models[m]}")
+    tts_name = st.selectbox("Model", list(TTS_MODELS),
+                            format_func=lambda m: f"{m}  -  {TTS_MODELS[m]}")
     speaker = st.file_uploader("Reference wav (XTTS voice cloning)", type=["wav"])
     text = st.text_area("Text", height=80)
+    from ai_toolset.speech import tts_model_available
+
+    if not tts_model_available(tts_name):
+        st.info(f"`{tts_name}` is not downloaded yet. Allocate it from the "
+                "**Model downloads** tab (TTS dropdown).")
     if text and st.button("Synthesize", type="primary"):
         if tts_name.endswith("xtts_v2") and speaker is None:
             st.error("XTTS v2 needs a reference wav (>= 6 s) for voice cloning.")
+        elif not tts_model_available(tts_name):
+            st.info(f"`{tts_name}` is not downloaded yet. Allocate it from the "
+                    "**Model downloads** tab (TTS dropdown).")
         else:
             with st.spinner("synthesizing..."):
                 load_tts(tts_name)
@@ -119,7 +127,8 @@ with tab_detect:
     st.subheader("YOLO detection")
     weights = st.text_input("Weights", value="yolov8n.pt")
     conf = st.slider("Confidence", 0.0, 1.0, 0.25)
-    img = st.file_uploader("Image", type=["jpg", "png", "jpeg", "bmp"])
+    img = st.file_uploader("Image", type=["jpg", "png", "jpeg", "bmp"],
+                           key="detect_image")
     if img is not None and st.button("Detect", type="primary"):
         with tempfile.NamedTemporaryFile(suffix=os.path.splitext(img.name)[1]) as tmp:
             tmp.write(img.getvalue())
@@ -139,7 +148,8 @@ with tab_detect:
 
 with tab_ocr:
     st.subheader("OCR (Windows.Media.Ocr)")
-    img = st.file_uploader("Image", type=["jpg", "png", "jpeg", "bmp"])
+    img = st.file_uploader("Image", type=["jpg", "png", "jpeg", "bmp"],
+                           key="ocr_image")
     if img is not None and st.button("Read text", type="primary"):
         from ai_toolset.ocr import ocr_image
 
@@ -153,28 +163,63 @@ with tab_ocr:
 
 with tab_models:
     st.subheader("Pre-download models")
-    st.caption("YOLO/whisper/TTS auto-download on first use; diarization needs an "
-               "HF token and RVC needs a user-trained model. These buttons fetch "
-               "everything up front.")
+    st.caption("Pick a variant for each model, then download it. The TTS/detect/STT "
+               "tabs use whatever has been allocated here.")
     from ai_toolset import models
 
-    if st.button("YOLO yolov8n.pt", use_container_width=True):
+    yolo_pick = st.selectbox("YOLO weights", models.YOLO_WEIGHTS
+                             if hasattr(models, "YOLO_WEIGHTS")
+                             else ["yolov8n.pt", "yolov8s.pt", "yolov8m.pt",
+                                   "yolov8l.pt", "yolov8x.pt"])
+    if st.button("Download YOLO weights", use_container_width=True):
         with st.spinner("downloading..."):
-            models.ensure_yolo()
+            models.ensure_yolo(yolo_pick)
         st.success("done")
-    if st.button("Whisper base (faster-whisper)", use_container_width=True):
+
+    whisper_size = st.selectbox("Whisper size", ["tiny", "base", "small", "medium",
+                                                 "large-v3"], index=1)
+    whisper_engine = st.selectbox("Whisper engine", ["faster", "whisper"])
+    if st.button("Download Whisper model", use_container_width=True):
         with st.spinner("downloading..."):
-            models.ensure_whisper("base")
+            models.ensure_whisper(whisper_size, engine=whisper_engine)
         st.success("done")
-    if st.button("TTS tacotron2-DDC", use_container_width=True):
-        with st.spinner("downloading..."):
-            models.ensure_tts()
+
+    tts_pick = st.selectbox("TTS model", list(TTS_MODELS),
+                            format_func=lambda m: f"{m}  -  {TTS_MODELS[m]}")
+    if st.button("Download TTS model", use_container_width=True):
+        with st.spinner("downloading (XTTS v2 is large)..."):
+            models.ensure_tts(tts_pick)
         st.success("done")
-    token = st.text_input("HF token (for diarization)", type="password")
-    if st.button("Diarization pipeline", use_container_width=True):
+
+    st.divider()
+    st.caption("Diarization needs a HF token (gated pyannote/speaker-diarization-3.1 "
+               "model). RVC needs a user-trained model path.")
+
+    def _pyannote_available():
         try:
-            with st.spinner("downloading (this is large)..."):
-                models.ensure_diarize(token or None)
-            st.success("done")
-        except RuntimeError as exc:
+            import pyannote.audio  # noqa: F401
+
+            return True
+        except ImportError:
+            return False
+
+    if _pyannote_available():
+        token = st.text_input("HF token (for diarization)", type="password")
+        if st.button("Download diarization pipeline", use_container_width=True):
+            try:
+                with st.spinner("downloading (this is large)..."):
+                    models.ensure_diarize(token or None)
+                st.success("done")
+            except RuntimeError as exc:
+                st.error(str(exc))
+    else:
+        st.info("The diarize extra is not installed (pyannote conflicts with "
+                "the rvc extra). Install it with: `uv sync --extra diarize`")
+
+    rvc_path = st.text_input("RVC model path (.pth)", value="")
+    if rvc_path and st.button("Register RVC model", use_container_width=True):
+        try:
+            models.ensure_rvc(rvc_path)
+            st.success("model path registered")
+        except Exception as exc:  # noqa: BLE001
             st.error(str(exc))

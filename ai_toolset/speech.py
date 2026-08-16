@@ -17,6 +17,8 @@ Backends:
     torch stack; pass a reference speaker wav for cloning.
 """
 
+import os
+
 from ai_toolset.cuda import set_visible_gpus
 
 
@@ -101,6 +103,7 @@ def synthesize_tts(text, out_path, model_name="tts_models/multilingual/multi-dat
     """
     _apply_gpus(gpus)
     _coqui_numpy_compat()
+    ensure_tts_model(model_name, gpus=gpus)
     import torch
     from TTS.api import TTS
 
@@ -136,14 +139,72 @@ def download_whisper(model="base", engine="faster", gpus=None):
     return model
 
 
+def tts_model_available(model_name):
+    """True when the model checkpoint is already in the local coqui cache."""
+    return _has_tts_checkpoint(_tts_cache_dir(model_name))
+
+
 def download_tts(model_name="tts_models/en/ljspeech/tacotron2-DDC", gpus=None):
     """Pre-download a Coqui TTS model into the local cache."""
+    ensure_tts_model(model_name, gpus=gpus)
+    return model_name
+
+
+def _tts_cache_dir(model_name):
+    """Mirror coqui's cache root (trainer.io get_user_data_dir): on Windows
+    <LocalAppData>/tts, else ~/.local/share/tts, plus the model dir name with
+    '/' flattened to '--' (e.g. .../tts/tts_models--multilingual--multi-dataset--xtts_v2)."""
+    base = os.environ.get("LOCALAPPDATA") or os.path.join(
+        os.path.expanduser("~"), ".local", "share")
+    return os.path.join(base, "tts", model_name.replace("/", "--"))
+
+
+def _has_tts_checkpoint(model_dir):
+    """True when the coqui cache dir looks complete: config.json plus a
+    checkpoint file.
+
+    A partial cache can be either config/vocab/hash without the .pth
+    (interrupted before the checkpoint) or a truncated .pth without config
+    (interrupted mid-checkpoint). Both are treated as missing so they get a
+    clean re-download instead of a load error."""
+    if not os.path.isdir(model_dir):
+        return False
+    names = os.listdir(model_dir)
+    if not any(name.endswith(".pth") for name in names):
+        return False
+    return "config.json" in names
+
+
+def ensure_tts_model(model_name="tts_models/multilingual/multi-dataset/xtts_v2",
+                     gpus=None):
+    """Return the cached coqui model dir, downloading it when the checkpoint
+    is missing.
+
+    Coqui's TTS() constructor downloads on first use, but an interrupted
+    fetch leaves a partial cache (config/vocab/hash present, checkpoint
+    absent) and then raises FileNotFoundError instead of resuming. A missing
+    checkpoint therefore triggers a clean re-download of the whole model.
+    """
     _apply_gpus(gpus)
     _coqui_numpy_compat()
+    model_dir = _tts_cache_dir(model_name)
+    if _has_tts_checkpoint(model_dir):
+        return model_dir
+    import shutil
+
+    shutil.rmtree(model_dir, ignore_errors=True)
+    # Coqui gates some models (XTTS v2) behind an interactive license prompt;
+    # auto-agree so the download works non-interactively. The user accepts the
+    # Coqui CPML (non-commercial) terms by enabling this download.
+    os.environ["COQUI_TOS_AGREED"] = "1"
     from TTS.api import TTS
 
     TTS(model_name, gpu=False)
-    return model_name
+    if not _has_tts_checkpoint(model_dir):
+        raise RuntimeError(
+            f"TTS model {model_name} failed to download fully into "
+            f"{model_dir}; check your network and retry.")
+    return model_dir
 
 
 def _coqui_numpy_compat():
