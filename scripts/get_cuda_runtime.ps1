@@ -6,15 +6,21 @@
 
 .DESCRIPTION
     TensorFlow on Windows requires matching CUDA and cuDNN runtime DLLs but
-    does NOT require a system-wide CUDA toolkit install. This script resolves
-    the exact build needed for your TensorFlow version, downloads it, and
-    extracts just the DLLs into <repo>/cuda_runtime/bin.
+    does NOT require a system-wide CUDA toolkit install. This script downloads
+    the exact build needed for your TensorFlow version and extracts just the
+    DLLs into <repo>/cuda_runtime/bin.
+
+    Every source is NVIDIA-official:
+      * CUDA runtime DLLs (cudart, cublas, cufft, curand, cusolver, cusparse)
+        come from NVIDIA's own redistributable wheels on PyPI
+        (nvidia-*-cu11), fetched with `uv pip download`.
+      * cuDNN comes from NVIDIA's redist server
+        (developer.download.nvidia.com/compute/redist).
 
     Nothing is guessed:
       * TensorFlow version -> CUDA/cuDNN mapping is a verified table.
-      * The cudatoolkit download URL is resolved live from the conda-forge
-        API (no hardcoded build hashes that can rot).
-      * cuDNN always uses the official NVIDIA redistributable - conda-forge
+      * Wheel versions are pinned to known-good releases.
+      * cuDNN always uses the official NVIDIA redistributable - third-party
         cudnn builds crash TensorFlow with 0xC0000409 on the first GPU op.
       * Your NVIDIA driver version is checked against the minimum required
         and a warning is printed if it is too old.
@@ -82,14 +88,27 @@ if (-not $WorkDir) { $WorkDir = Join-Path $env:TEMP 'ai_toolset_cuda' }
 $binDir = Join-Path $TargetDir 'bin'
 
 $tfMatrix = @{
-    '2.4'  = @{ Cuda = '11.0'; CudaPkg = '11.0.3'; Cudnn = '8.0.5.39'; DriverMin = 451.82 }
-    '2.5'  = @{ Cuda = '11.2'; CudaPkg = '11.2.2'; Cudnn = '8.1.0.77'; DriverMin = 460.89 }
-    '2.6'  = @{ Cuda = '11.2'; CudaPkg = '11.2.2'; Cudnn = '8.1.0.77'; DriverMin = 460.89 }
-    '2.7'  = @{ Cuda = '11.2'; CudaPkg = '11.2.2'; Cudnn = '8.1.0.77'; DriverMin = 460.89 }
-    '2.8'  = @{ Cuda = '11.2'; CudaPkg = '11.2.2'; Cudnn = '8.1.0.77'; DriverMin = 460.89 }
-    '2.9'  = @{ Cuda = '11.2'; CudaPkg = '11.2.2'; Cudnn = '8.1.0.77'; DriverMin = 460.89 }
-    '2.10' = @{ Cuda = '11.2'; CudaPkg = '11.2.2'; Cudnn = '8.1.0.77'; DriverMin = 460.89 }
+    '2.4'  = @{ Cuda = '11.0'; Cudnn = '8.0.5.39'; DriverMin = 451.82 }
+    '2.5'  = @{ Cuda = '11.2'; Cudnn = '8.1.0.77'; DriverMin = 460.89 }
+    '2.6'  = @{ Cuda = '11.2'; Cudnn = '8.1.0.77'; DriverMin = 460.89 }
+    '2.7'  = @{ Cuda = '11.2'; Cudnn = '8.1.0.77'; DriverMin = 460.89 }
+    '2.8'  = @{ Cuda = '11.2'; Cudnn = '8.1.0.77'; DriverMin = 460.89 }
+    '2.9'  = @{ Cuda = '11.2'; Cudnn = '8.1.0.77'; DriverMin = 460.89 }
+    '2.10' = @{ Cuda = '11.2'; Cudnn = '8.1.0.77'; DriverMin = 460.89 }
 }
+
+# CUDA runtime DLLs from NVIDIA's official redistributable wheels on PyPI.
+# These are CUDA 11.x wheels (the cu11 lineage); TensorFlow 2.x links them by
+# name and CUDA-major, so a newer 11.x runtime is fully compatible with the
+# 11.2 build TF 2.10 was validated against.
+$cu11Wheels = @(
+    'nvidia-cuda-runtime-cu11==11.8.89',
+    'nvidia-cublas-cu11==11.11.3.6',
+    'nvidia-cufft-cu11==10.9.0.58',
+    'nvidia-curand-cu11==10.3.0.86',
+    'nvidia-cusolver-cu11==11.4.1.48',
+    'nvidia-cusparse-cu11==11.7.5.86'
+)
 
 if ($Framework -eq 'pytorch') {
     # PyTorch CUDA 11.8 wheels (download.pytorch.org/whl/cu118) bundle the
@@ -106,15 +125,13 @@ if ($Framework -eq 'pytorch') {
     $entry = $tfMatrix[$TensorFlowVersion]
     if (-not $CudaVersion) { $CudaVersion = $entry.Cuda }
     if (-not $CudnnVersion) { $CudnnVersion = $entry.Cudnn }
-    $CudaPkgVersion = $entry.CudaPkg
     $minDriver = $entry.DriverMin
 } else {
-    $CudaPkgVersion = $CudaVersion
     $minDriver = 451.82
 }
 
-$cudnnMajorMinor = ($CudnnVersion -split '\.')[0..2] -join '.'
-$cudnnUrl = "https://developer.download.nvidia.com/compute/redist/cudnn/v$cudnnMajorMinor/cudnn-$CudaVersion-windows-x64-v$CudnnVersion.zip"
+$cudnnPatch = ($CudnnVersion -split '\.')[0..2] -join '.'
+$cudnnUrl = "https://developer.download.nvidia.com/compute/redist/cudnn/v$cudnnPatch/cudnn-$CudaVersion-windows-x64-v$CudnnVersion.zip"
 $cudnnFile = "cudnn-$CudaVersion-windows-x64-v$CudnnVersion.zip"
 
 function Get-Python {
@@ -147,23 +164,13 @@ function Assert-DriverCompatible {
     }
 }
 
-function Get-CudaToolkitUrl {
-    param([string]$Version)
-    Write-Host "Resolving cudatoolkit $Version from conda-forge API ..."
-    $api = Invoke-RestMethod -Uri 'https://api.anaconda.org/package/conda-forge/cudatoolkit' -Method Get
-    $candidates = @($api.files | Where-Object {
-        ($_.version -eq $Version -or $_.version -like "$Version.*") -and $_.basename -match '^win-64/.*\.tar\.bz2$'
-    })
-    if ($Version -eq '11.2.2') {
-        $knownGood = @($candidates | Where-Object { $_.basename -eq 'win-64/cudatoolkit-11.2.2-h933977f_8.tar.bz2' })
-        if ($knownGood) { $candidates = $knownGood }
+function Expand-Wheels {
+    param([string]$SourceDir, [string]$DestBin)
+    # `uv pip install --target` already unpacks each wheel; DLLs live under
+    # nvidia/<pkg>/bin (or lib). Copy every DLL recursively into one flat dir.
+    Get-ChildItem -LiteralPath $SourceDir -Recurse -Filter '*.dll' -File | ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination $DestBin -Force
     }
-    if (-not $candidates) {
-        throw "No win-64 cudatoolkit $Version found on conda-forge."
-    }
-    $url = $candidates[0].download_url
-    if ($url -like '//*') { $url = 'https:' + $url }
-    return $url, $candidates[0].basename
 }
 
 if ($Framework -eq 'pytorch') {
@@ -229,28 +236,29 @@ if ($Framework -eq 'fasterwhisper') {
     return
 }
 
+Assert-DriverCompatible -Tool 'TensorFlow'
+
 $alreadyPopulated = (Test-Path $binDir) -and ((Get-ChildItem -LiteralPath $binDir -Filter '*.dll' -File | Measure-Object).Count -ge 8)
 if ($alreadyPopulated) {
     Write-Host "cuda_runtime/bin already populated, nothing to do."
 } else {
     New-Item -ItemType Directory -Path $TargetDir, $WorkDir -Force | Out-Null
 
-    $cudaUrl, $cudaFile = Get-CudaToolkitUrl -Version $CudaVersion
-    $cudaArchive = Join-Path $WorkDir $cudaFile
-    if (-not (Test-Path $cudaArchive)) {
-        Write-Host "Downloading cudatoolkit $CudaVersion ..."
-        Invoke-WebRequest -Uri $cudaUrl -OutFile $cudaArchive
+    # --- CUDA runtime DLLs from NVIDIA's official PyPI redistributable wheels ---
+    $wheelDir = Join-Path $WorkDir 'wheels'
+    New-Item -ItemType Directory -Path $wheelDir, $binDir -Force | Out-Null
+    $uv = Get-Command uv -ErrorAction SilentlyContinue
+    if (-not $uv) {
+        throw "uv not found on PATH - required to download NVIDIA's redistributable wheels."
     }
-    $cudaExtract = Join-Path $WorkDir 'cudatoolkit'
-    $cudaDllDir = Join-Path $cudaExtract 'Library\bin'
-    if (-not ((Test-Path $cudaDllDir) -and (Get-ChildItem -LiteralPath $cudaDllDir -Filter '*.dll' -File | Measure-Object).Count -gt 0)) {
-        if (Test-Path $cudaExtract) { Remove-Item -LiteralPath $cudaExtract -Recurse -Force }
-        New-Item -ItemType Directory -Path $cudaExtract -Force | Out-Null
-        Write-Host "Extracting cudatoolkit ..."
-        & (Get-Python) -c "import sys, tarfile; tarfile.open(sys.argv[1], 'r:bz2').extractall(sys.argv[2])" $cudaArchive $cudaExtract
-        if ($LASTEXITCODE -ne 0) { throw "Failed to extract cudatoolkit" }
-    }
+    $wheelArgs = @('pip', 'install', '--target', $wheelDir, '--no-deps',
+                   '--only-binary', ':all:') + $cu11Wheels
+    Write-Host "Downloading NVIDIA CUDA runtime wheels (official PyPI redistributables) ..."
+    & $uv.Source @wheelArgs
+    if ($LASTEXITCODE -ne 0) { throw "uv pip install --target failed for NVIDIA cu11 wheels." }
+    Expand-Wheels -SourceDir $wheelDir -DestBin $binDir
 
+    # --- cuDNN (official NVIDIA redistributable; third-party builds crash TF) ---
     $cudnnArchive = Join-Path $WorkDir $cudnnFile
     if (-not (Test-Path $cudnnArchive)) {
         Write-Host "Downloading cuDNN $CudnnVersion (official NVIDIA build, ~665 MB) ..."
@@ -260,16 +268,13 @@ if ($alreadyPopulated) {
     $cudnnDllDir = Join-Path $cudnnExtract 'cuda\bin'
     if (-not ((Test-Path $cudnnDllDir) -and (Get-ChildItem -LiteralPath $cudnnDllDir -Filter '*.dll' -File | Measure-Object).Count -gt 0)) {
         if (Test-Path $cudnnExtract) { Remove-Item -LiteralPath $cudnnExtract -Recurse -Force }
+        New-Item -ItemType Directory -Path $cudnnExtract -Force | Out-Null
         Write-Host "Extracting cuDNN ..."
         Expand-Archive -LiteralPath $cudnnArchive -DestinationPath $cudnnExtract -Force
     }
-
-    New-Item -ItemType Directory -Path $binDir -Force | Out-Null
-    foreach ($srcDir in @($cudaDllDir, $cudnnDllDir)) {
-        if (Test-Path $srcDir) {
-            Get-ChildItem -LiteralPath $srcDir -Filter '*.dll' -File | ForEach-Object {
-                Copy-Item -LiteralPath $_.FullName -Destination $binDir -Force
-            }
+    if (Test-Path $cudnnDllDir) {
+        Get-ChildItem -LiteralPath $cudnnDllDir -Filter '*.dll' -File | ForEach-Object {
+            Copy-Item -LiteralPath $_.FullName -Destination $binDir -Force
         }
     }
 
@@ -289,5 +294,5 @@ if (-not $SkipSitecustomize) {
 }
 
 Write-Host ""
-Write-Host "Verify with:"
-Write-Host "  uv run python -c \"import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))\""
+Write-Host 'Verify with:'
+Write-Host '  uv run python -c "import tensorflow as tf; print(tf.config.list_physical_devices(''GPU''))"'

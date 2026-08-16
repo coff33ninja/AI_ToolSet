@@ -29,10 +29,13 @@ toolkit keeps the DLLs in `cuda_runtime/bin` and prepends that folder to
 Nothing is guessed:
 
 - The TensorFlow -> CUDA/cuDNN mapping is a verified table (below).
-- The `cudatoolkit` download URL is resolved **live from the conda-forge
-  API**, so build hashes never rot in this repo.
-- cuDNN always comes from the **official NVIDIA redistributable** - conda
-  builds of cuDNN crash TensorFlow 2.10 with `0xC0000409` on the first GPU op.
+- The TensorFlow -> CUDA/cuDNN mapping is a verified table (below).
+- The CUDA runtime DLLs (cudart, cublas, cufft, curand, cusolver, cusparse)
+  come from NVIDIA's own redistributable wheels on PyPI (`nvidia-*-cu11`),
+  pinned to known-good versions.
+- cuDNN always comes from the **official NVIDIA redistributable** server
+  (developer.download.nvidia.com) - third-party builds of cuDNN crash
+  TensorFlow 2.10 with `0xC0000409` on the first GPU op.
 - Your NVIDIA driver version is checked against the CUDA minimum and you get
   a warning if it is too old.
 
@@ -374,11 +377,11 @@ are imported, so it is applied via `CUDA_VISIBLE_DEVICES`:
 ```python
 from ai_toolset import cuda
 
-cuda.set_visible_gpus([0, 1])   # both GPUs
+cuda.set_visible_gpus([0, 1])  # both GPUs
 # cuda.set_visible_gpus([1])    # only the second GPU
 # cuda.set_visible_gpus()       # all GPUs
 
-cuda.configure_tf_gpus()        # after import: memory growth + visible set
+cuda.configure_tf_gpus()  # after import: memory growth + visible set
 ```
 
 Or use the CLI (interactive when multiple GPUs and `--gpus` omitted):
@@ -433,10 +436,11 @@ See `examples/verify_gpu.py`, `examples/make_synthetic_dataset.py`,
 ## How it works
 
 1. `uv sync` installs TensorFlow 2.10 (GPU wheels) into `.venv`.
-2. `get_cuda_runtime.ps1` reads the mapping table, resolves the exact
-   `cudatoolkit` archive from the conda-forge API, downloads cuDNN from
-   NVIDIA's redist server, extracts the DLLs into `cuda_runtime/bin`, and
-   copies `sitecustomize.py` into the venv's site-packages.
+2. `get_cuda_runtime.ps1` reads the mapping table, downloads NVIDIA's own
+   redistributable CUDA runtime wheels (`nvidia-*-cu11`) plus the cuDNN
+   archive from NVIDIA's redist server, extracts the DLLs into
+   `cuda_runtime/bin`, and copies `sitecustomize.py` into the venv's
+   site-packages.
 3. At every interpreter start, `sitecustomize.py` prepends
    `cuda_runtime/bin` to `PATH`. TensorFlow finds `cudart64_110.dll` /
    `cudnn64_8.dll` there and loads the GPU plugin.
