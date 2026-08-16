@@ -17,8 +17,6 @@ Backends:
     torch stack; pass a reference speaker wav for cloning.
 """
 
-import os
-
 from ai_toolset.cuda import set_visible_gpus
 
 
@@ -65,7 +63,17 @@ def transcribe_faster(audio_path, model="base", language=None, device="auto",
         import ctranslate2
         device = "cuda" if ctranslate2.get_cuda_device_count() > 0 else "cpu"
     if compute_type == "auto":
-        compute_type = "float16" if device == "cuda" else "int8"
+        import ctranslate2
+        supported = set(ctranslate2.get_supported_compute_types(device))
+        if "float16" in supported:
+            compute_type = "float16"
+        elif "int8_float16" in supported:
+            compute_type = "int8_float16"
+        elif device == "cuda":
+            # Pascal (GTX 10-series) has no efficient fp16 in CTranslate2.
+            compute_type = "float32"
+        else:
+            compute_type = "int8"
     loaded = WhisperModel(model, device=device, compute_type=compute_type)
     segments, info = loaded.transcribe(
         audio_path, language=language, beam_size=beam_size,
