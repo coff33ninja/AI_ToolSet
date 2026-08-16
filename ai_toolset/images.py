@@ -6,6 +6,7 @@ import os
 import xml.etree.ElementTree as ET
 
 import cv2
+import numpy as np
 
 
 def pad_to_square(frame, color=(0, 0, 0)):
@@ -152,3 +153,59 @@ def xml_to_csv(xml_dir, out_csv):
         writer.writerow(["path", "xmin", "ymin", "xmax", "ymax", "class"])
         writer.writerows(rows)
     return len(rows)
+
+
+_AUGMENT_OPS = {
+    "hflip": lambda img: cv2.flip(img, 1),
+    "vflip": lambda img: cv2.flip(img, 0),
+    "rot90": lambda img: cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE),
+    "rot180": lambda img: cv2.rotate(img, cv2.ROTATE_180),
+    "rot270": lambda img: cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE),
+    "blur": lambda img: cv2.GaussianBlur(img, (5, 5), 0),
+}
+
+
+def _brightness_contrast(img):
+    alpha = float(np.random.uniform(0.7, 1.3))  # contrast
+    beta = int(np.random.uniform(-40, 40))       # brightness
+    return cv2.convertScaleAbs(img, alpha=alpha, beta=beta)
+
+
+def _hue_shift(img):
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    hsv[:, :, 0] = (hsv[:, :, 0] + int(np.random.uniform(-20, 20))) % 180
+    return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+
+
+_AUGMENT_RANDOM_OPS = {
+    "bright": _brightness_contrast,
+    "hue": _hue_shift,
+}
+
+
+def augment_dir(in_dir, out_dir=None, ext="jpg", ops=None):
+    """Expand a dataset with deterministic + random augmentations.
+
+    Each input image produces one output per op, written as <name>_<op>.<ext>.
+    Default ops: hflip, vflip, rot90, rot180, rot270, blur, bright, hue.
+    Returns the number of images written.
+    """
+    if out_dir is None:
+        out_dir = in_dir
+    os.makedirs(out_dir, exist_ok=True)
+    if ops is None:
+        ops = list(_AUGMENT_OPS) + list(_AUGMENT_RANDOM_OPS)
+    count = 0
+    for path in sorted(glob.glob(os.path.join(in_dir, f"*.{ext}"))):
+        img = cv2.imread(path)
+        if img is None:
+            continue
+        stem = os.path.splitext(os.path.basename(path))[0]
+        for op in ops:
+            fn = _AUGMENT_OPS.get(op) or _AUGMENT_RANDOM_OPS.get(op)
+            if fn is None:
+                raise ValueError(f"Unknown augmentation op: {op}")
+            out = os.path.join(out_dir, f"{stem}_{op}.{ext}")
+            cv2.imwrite(out, fn(img))
+            count += 1
+    return count

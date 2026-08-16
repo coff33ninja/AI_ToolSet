@@ -13,3 +13,5 @@ training/
 data/
 *.h5
 *.mp4
+/vendor
+yolov8n.pt

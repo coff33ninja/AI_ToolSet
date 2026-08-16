@@ -11,6 +11,7 @@ convention the RVC webui expects.
 
 import glob
 import os
+import threading
 
 import librosa
 import soundfile as sf
@@ -126,3 +127,60 @@ def make_rvc_dataset(src_dir, out_dir, speaker_id=0, max_sec=60, sr=48000,
             sf.write(out_path, y[start:end], sr, subtype="PCM_16")
             index += 1
     return index
+
+
+def list_audio_devices():
+    """List sounddevice (PortAudio) input/output devices.
+
+    Returns (inputs, outputs, hostapis) tuples; each device is a dict with
+    name/max_input_channels/max_output_channels/default_sample_rate.
+    """
+    import sounddevice as sd
+
+    return sd.query_devices()
+
+
+def record_mic(out_path, duration, sr=16000, device=None):
+    """Record the microphone to a mono WAV file via sounddevice.
+
+    duration>0 records exactly that many seconds (blocking). duration<=0
+    records until Enter is pressed in the console. Returns (written_path,
+    seconds_recorded). Requires the `audio` extra:  uv sync --extra audio
+    """
+    import numpy as np
+    import sounddevice as sd
+
+    if duration > 0:
+        data = sd.rec(int(duration * sr), samplerate=sr, channels=1,
+                      dtype="float32", device=device)
+        sd.wait()
+        frames = data
+        seconds = duration
+    else:
+        frames = []
+        stop = threading.Event()
+        counter = {"n": 0}
+
+        def _stop_on_enter():
+            try:
+                input("Press Enter to stop recording...\n")
+            except EOFError:
+                pass
+            stop.set()
+
+        def _callback(indata, frames_count, time_info, status):
+            frames.append(indata.copy())
+            counter["n"] += frames_count
+
+        threading.Thread(target=_stop_on_enter, daemon=True).start()
+        with sd.InputStream(samplerate=sr, channels=1, dtype="float32",
+                            device=device, callback=_callback):
+            while not stop.is_set():
+                sd.sleep(100)
+        data = np.concatenate(frames, axis=0) if frames else np.zeros((0, 1))
+        seconds = counter["n"] / sr
+
+    data = data.reshape(-1) if data.ndim > 1 else data
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    sf.write(out_path, data, sr, subtype="PCM_16")
+    return out_path, seconds

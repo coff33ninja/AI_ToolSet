@@ -43,6 +43,44 @@ stt = [
     "nvidia-cuda-runtime-cu12==12.9.79",
 ]
 
+# Vision: YOLO detection + training (ultralytics). torchvision must resolve
+# from the same CUDA 11.8 wheel index as torch (see [tool.uv.sources]).
+# Install with: uv sync --extra voice --extra vision
+vision = [
+    "ultralytics",
+    "torchvision",
+]
+
+# Audio capture for voice cloning / live transcription (sounddevice wraps
+# PortAudio via its own wheels - no system installs).
+# Install with: uv sync --extra audio
+audio = [
+    "sounddevice",
+]
+
+# OCR via Windows.Media.Ocr (no model downloads, no torch).
+# Install with: uv sync --extra ocr
+ocr = [
+    "winocr",
+]
+
+# RVC voice conversion. rvc-python pins numpy<=1.23.5 which matches this
+# project's TF-pinned numpy; it pulls fairseq/hydra for the HuBERT encoder.
+# fairseq is listed here (not just via rvc-python) so the [tool.uv.sources]
+# path mapping applies - uv only honors sources for direct dependencies.
+# Install with: uv sync --extra rvc
+rvc = [
+    "rvc-python",
+    "fairseq==0.12.2",
+]
+
+# Speaker diarization. Heavy graph (speechbrain, onnxruntime,
+# pytorch-lightning); the model is gated and needs a Hugging Face token.
+# Install with: uv sync --extra diarize
+diarize = [
+    "pyannote.audio>=3.0",
+]
+
 # Text-to-speech: Coqui XTTS v2 voice cloning (uses the torch already pulled
 # by the voice extra). 0.24.3 is the newest release with a prebuilt
 # cp310-win_amd64 wheel - newer versions are sdist-only and their C extension
@@ -67,6 +105,14 @@ dev = ["ruff"]
   # is what uv falls back to anyway and silences the warning.
   cache-dir = ".uv-cache"
   link-mode = "copy"
+
+  # rvc (fairseq -> hydra-core<1.1 -> omegaconf<2.1) and diarize (pyannote
+  # stack -> omegaconf>=2.1) are fundamentally incompatible in one
+  # environment. Declaring them conflicting lets each extra resolve and
+  # install standalone: uv sync --extra rvc  OR  uv sync --extra diarize.
+  conflicts = [
+    [{ extra = "rvc" }, { extra = "diarize" }],
+  ]
 
 
 # This toolkit targets Windows only (TensorFlow 2.10 native-Windows GPU). Pin
@@ -114,3 +160,8 @@ explicit = true
 [tool.uv.sources]
 torch = { index = "pytorch-cu118" }
 torchaudio = { index = "pytorch-cu118" }
+torchvision = { index = "pytorch-cu118" }
+# Vendored + patched: stock fairseq 0.12.2 builds C/Cython extensions that
+# fail without the Windows SDK. The patch drops them - RVC inference only
+# needs the pure-Python HuBERT path (see vendor/fairseq-0.12.2/setup.py).
+fairseq = { path = "vendor/fairseq-0.12.2" }

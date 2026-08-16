@@ -135,3 +135,129 @@ def _coqui_numpy_compat():
             (),
             {"Float64DType": np.dtype(np.float64).__class__},
         )
+
+
+def transcribe_live(duration=60, chunk=5, model="base", language=None,
+                    gpus=None, out_dir="live_segments"):
+    """Stream-transcribe the microphone with faster-whisper.
+
+    Records `chunk`-second windows and transcribes each one as it lands,
+    printing the transcript as it goes. duration<=0 runs until Ctrl+C. Each
+    window is also written to out_dir as live_seg_<n>.wav (16 kHz mono).
+    Requires the `audio` + `stt` extras:
+        uv sync --extra audio --extra stt
+    Returns the list of (wav_path, transcript).
+    """
+    import os
+    import tempfile
+    import time
+
+    from ai_toolset.audio import record_mic
+
+    os.makedirs(out_dir, exist_ok=True)
+    loaded = None
+    results = []
+    n = 0
+    try:
+        while True:
+            tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+            tmp.close()
+            path, seconds = record_mic(tmp.name, duration=chunk, sr=16000)
+            if seconds < 0.5:
+                os.remove(tmp.name)
+                if duration <= 0:
+                    time.sleep(0.5)
+                continue
+            final_path = os.path.join(out_dir, f"live_seg_{n:04d}.wav")
+            os.replace(path, final_path)
+            if loaded is None:
+                _apply_gpus(gpus)
+                from faster_whisper import WhisperModel
+                loaded = WhisperModel(model, device="cpu", compute_type="int8")
+            segments, info = loaded.transcribe(final_path, language=language)
+            text = " ".join(s.text.strip() for s in segments).strip()
+            print(f"[{info.language} p={info.language_probability:.2f}] {text or '(silence)'}")
+            results.append((final_path, text))
+            n += 1
+            if duration > 0 and n * chunk >= duration:
+                break
+    except KeyboardInterrupt:
+        pass
+    return results
+
+
+def synthesize_lines(lines, out_dir="tts_output", model_name=
+                     "tts_models/multilingual/multi-dataset/xtts_v2",
+                     speaker_wav=None, language="en", gpus=None, prefix="line",
+                     metadata_csv=None):
+    """Synthesize one wav per text line (TTS batch / dataset builder).
+
+    Skips empty lines. Writes <prefix>_<i:04d>.wav per line. When metadata_csv
+    is given (e.g. "metadata.csv"), a Coqui-format "path|text" file is written
+    alongside for fine-tuning datasets. Returns the list of written wav paths.
+    """
+    import os
+
+    os.makedirs(out_dir, exist_ok=True)
+    written = []
+    meta = []
+    for i, line in enumerate(lines):
+        text = line.strip()
+        if not text:
+            continue
+        out_path = os.path.join(out_dir, f"{prefix}_{i:04d}.wav")
+        synthesize_tts(text, out_path, model_name=model_name,
+                       speaker_wav=speaker_wav, language=language, gpus=gpus)
+        written.append(out_path)
+        if metadata_csv:
+            meta.append(f"{os.path.basename(out_path)}|{text}")
+    if metadata_csv:
+        with open(os.path.join(out_dir, metadata_csv), "w",
+                  encoding="utf-8") as f:
+            f.write("\n".join(meta) + "\n")
+    return written
+
+
+def play_audio(path):
+    """Play a WAV file through the default audio device (sounddevice)."""
+    import soundfile as sf
+
+    data, sr = sf.read(path, dtype="float32")
+    if data.ndim > 1:
+        data = data.mean(axis=1)
+    _play_float32(data, sr)
+
+
+def _play_float32(data, sr):
+    import sounddevice as sd
+
+    sd.play(data, sr)
+    sd.wait()
+
+
+def narrate(lines, model_name="tts_models/multilingual/multi-dataset/xtts_v2",
+            speaker_wav=None, language="en", gpus=None, out_dir=None):
+    """Synthesize each line and play it out loud in sequence.
+
+    out_dir optionally keeps the generated wavs (default: skip saving).
+    Requires the `tts` + `audio` extras. Returns the list of wav paths played.
+    """
+    import os
+    import tempfile
+
+    paths = []
+    for i, line in enumerate(lines):
+        text = line.strip()
+        if not text:
+            continue
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
+            wav = os.path.join(out_dir, f"narrate_{i:04d}.wav")
+        else:
+            fd, wav = tempfile.mkstemp(suffix=".wav")
+            os.close(fd)
+        synthesize_tts(text, wav, model_name=model_name,
+                       speaker_wav=speaker_wav, language=language, gpus=gpus)
+        play_audio(wav)
+        paths.append(wav)
+    return paths

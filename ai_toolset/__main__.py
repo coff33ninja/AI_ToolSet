@@ -211,6 +211,214 @@ def cmd_tts(args):
     return 0
 
 
+def cmd_detect(args):
+    from ai_toolset import detect
+
+    gpus = [int(x) for x in args.gpus.split(",")] if args.gpus else None
+    detections, _ = detect.detect_image(args.image, weights=args.model,
+                                        conf=args.conf, gpus=gpus)
+    if args.json:
+        print(json.dumps(detections, indent=2))
+    else:
+        for det in detections:
+            x1, y1, x2, y2 = det["box"]
+            print(f"{det['label']:>12s}  {det['conf']:.2f}  ({x1},{y1})-({x2},{y2})")
+        print(f"{len(detections)} detections")
+    if args.annotate:
+        out = detect.annotate(args.image, args.annotate, weights=args.model,
+                              conf=args.conf, gpus=gpus)
+        print(f"Annotated image: {out}")
+    return 0
+
+
+def cmd_detect_live(args):
+    import cv2
+
+    from ai_toolset import detect, screen
+
+    gpus = [int(x) for x in args.gpus.split(",")] if args.gpus else None
+    region = json.loads(args.region) if args.region else None
+    if region is None and args.select_region:
+        region = screen.select_region()
+        if region is None:
+            print("Cancelled.")
+            return 1
+    os.makedirs(args.save_dir, exist_ok=True)
+    index = 0
+    for frame, detections, fps in detect.detect_stream(region, weights=args.model,
+                                                       conf=args.conf, gpus=gpus):
+        detect.draw_detections(frame, detections)
+        cv2.putText(frame, f"{fps:.1f} fps", (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+        cv2.imshow("detect-live", frame)
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord("s"):
+            cv2.imwrite(os.path.join(args.save_dir, f"{index:05d}.jpg"), frame)
+            index += 1
+            print(f"Saved frame {index}")
+        if key == ord("q"):
+            break
+    cv2.destroyAllWindows()
+    return 0
+
+
+def cmd_train(args):
+    from ai_toolset.train import best_weights, train_yolo
+
+    gpus = args.gpus or ("0" if args.gpus is None else args.gpus)
+    train_yolo(args.data, model=args.model, epochs=args.epochs,
+               imgsz=args.imgsz, batch=args.batch, gpus=gpus,
+               project=args.project, name=args.name, exist_ok=args.exist_ok,
+               patience=args.patience)
+    weights = best_weights(args.project, args.name)
+    print(f"Training complete. Best weights: {weights}")
+    return 0
+
+
+def cmd_record_screen(args):
+    import json as _json
+
+    from ai_toolset import screen
+    from ai_toolset.video import record_screen
+
+    region = _json.loads(args.region) if args.region else None
+    if region is None:
+        region = screen.select_region()
+        if region is None:
+            print("Cancelled.")
+            return 1
+    frames = record_screen(region, args.out_path, duration=args.duration,
+                           fps=args.fps, codec=args.codec)
+    print(f"Wrote {frames} frames to {args.out_path}")
+    return 0
+
+
+def cmd_webcam_capture(args):
+    from ai_toolset.video import webcam_capture
+
+    recorded, snapshots = webcam_capture(args.camera, out_path=args.out_path,
+                                         duration=args.duration, fps=args.fps,
+                                         codec=args.codec, save_dir=args.save_dir)
+    print(f"Recorded {recorded} frames, saved {snapshots} snapshots")
+    return 0
+
+
+def cmd_augment(args):
+    from ai_toolset.images import augment_dir
+
+    count = augment_dir(args.in_dir, args.out_dir, ext=args.ext, ops=args.ops)
+    print(f"Wrote {count} augmented images")
+    return 0
+
+
+def cmd_record_audio(args):
+    from ai_toolset.audio import record_mic
+
+    path, seconds = record_mic(args.out, args.duration, sr=args.sr,
+                               device=args.device)
+    print(f"Recorded {seconds:.1f}s to {path}")
+    return 0
+
+
+def cmd_live_transcribe(args):
+    from ai_toolset.speech import transcribe_live
+
+    gpus = [int(x) for x in args.gpus.split(",")] if args.gpus else None
+    results = transcribe_live(duration=args.duration, chunk=args.chunk,
+                              model=args.model, language=args.language,
+                              gpus=gpus, out_dir=args.out_dir)
+    print(f"Transcribed {len(results)} segments to {args.out_dir}")
+    return 0
+
+
+def cmd_tts_batch(args):
+    from ai_toolset.speech import synthesize_lines
+
+    gpus = [int(x) for x in args.gpus.split(",")] if args.gpus else None
+    with open(args.text_file, encoding="utf-8") as f:
+        lines = f.readlines()
+    written = synthesize_lines(lines, out_dir=args.out_dir,
+                               model_name=args.model, speaker_wav=args.speaker,
+                               language=args.language, gpus=gpus,
+                               prefix=args.prefix, metadata_csv=args.metadata)
+    print(f"Wrote {len(written)} wav files to {args.out_dir}")
+    return 0
+
+
+def cmd_narrate(args):
+    from ai_toolset.speech import narrate
+
+    gpus = [int(x) for x in args.gpus.split(",")] if args.gpus else None
+    with open(args.text_file, encoding="utf-8") as f:
+        lines = f.readlines()
+    paths = narrate(lines, model_name=args.model, speaker_wav=args.speaker,
+                    language=args.language, gpus=gpus, out_dir=args.out_dir)
+    print(f"Played {len(paths)} lines")
+    return 0
+
+
+def cmd_benchmark(args):
+    from ai_toolset.benchmark import benchmark_stt, benchmark_yolo, print_table
+
+    gpus = [int(x) for x in args.gpus.split(",")] if args.gpus else None
+    if not gpus and not args.cpu:
+        from ai_toolset.cuda import detect_gpus
+        gpus = [g["index"] for g in detect_gpus()] or [None]
+    rows = []
+    if args.audio:
+        for engine in args.engines:
+            rows.extend(benchmark_stt(args.audio, engine=engine,
+                                      model=args.model, iterations=args.iterations,
+                                      gpus=gpus))
+    if args.image:
+        rows.extend(benchmark_yolo(args.image, weights=args.model,
+                                   iterations=args.iterations, gpus=gpus))
+    print_table(rows)
+    return 0
+
+
+def cmd_ocr(args):
+    from ai_toolset.ocr import ocr_image, ocr_screen
+
+    if args.image:
+        text, lines = ocr_image(args.image, language=args.language)
+    else:
+        import json as _json
+
+        region = _json.loads(args.region) if args.region else None
+        text, lines = ocr_screen(region, language=args.language)
+    print(text)
+    if args.lines:
+        for line in lines:
+            print(f"  [{line['line_index']}] {line['text']}")
+    return 0
+
+
+def cmd_voice_convert(args):
+    from ai_toolset.voice import convert_voice
+
+    gpus = [int(x) for x in args.gpus.split(",")] if args.gpus else None
+    out = convert_voice(args.input, args.output, args.model,
+                        index_path=args.index, device=args.device,
+                        f0_method=args.f0, index_rate=args.index_rate,
+                        protect=args.protect, pitch=args.pitch, gpus=gpus)
+    print(f"Wrote {out}")
+    return 0
+
+
+def cmd_diarize(args):
+    from ai_toolset.diarize import diarize
+
+    gpus = [int(x) for x in args.gpus.split(",")] if args.gpus else None
+    segments = diarize(args.audio, out_path=args.out, token=args.token,
+                       min_speakers=args.min_speakers,
+                       max_speakers=args.max_speakers, gpus=gpus)
+    for seg in segments:
+        print(f"{seg['start']:7.2f}s -> {seg['end']:7.2f}s  {seg['speaker']}")
+    print(f"{len(segments)} turns")
+    return 0
+
+
 def build_parser():
     parser = argparse.ArgumentParser(prog="python -m ai_toolset",
                                      description="Reusable AI toolkit CLI")
@@ -332,6 +540,154 @@ def build_parser():
     p.add_argument("--language", default="en", help="language for multilingual models")
     p.add_argument("--gpus", help="comma-separated physical GPU indices, e.g. '0' or '0,1'")
     p.set_defaults(func=cmd_tts)
+
+    p = sub.add_parser("detect", help="run YOLO detection on an image")
+    p.add_argument("image")
+    p.add_argument("--model", default="yolov8n.pt", help="weights file or YOLO name")
+    p.add_argument("--conf", type=float, default=0.25)
+    p.add_argument("--annotate", help="also write an annotated copy to this path")
+    p.add_argument("--json", action="store_true", help="print detections as JSON")
+    p.add_argument("--gpus", help="comma-separated physical GPU indices, e.g. '0' or '0,1'")
+    p.set_defaults(func=cmd_detect)
+
+    p = sub.add_parser("detect-live", help="live YOLO detection on a screen region; s=save, q=quit")
+    p.add_argument("--model", default="yolov8n.pt")
+    p.add_argument("--conf", type=float, default=0.25)
+    p.add_argument("--region", help="JSON region dict {top,left,width,height}")
+    p.add_argument("--select-region", action="store_true",
+                   help="interactively select the region first")
+    p.add_argument("--save-dir", default="detected_frames")
+    p.add_argument("--gpus", help="comma-separated physical GPU indices, e.g. '0' or '0,1'")
+    p.set_defaults(func=cmd_detect_live)
+
+    p = sub.add_parser("train", help="train a YOLO model (ultralytics)")
+    p.add_argument("data", help="path to dataset data.yaml")
+    p.add_argument("--model", default="yolov8n.pt")
+    p.add_argument("--epochs", type=int, default=100)
+    p.add_argument("--imgsz", type=int, default=640)
+    p.add_argument("--batch", type=int, default=16)
+    p.add_argument("--gpus", default="0", help="GPU index, comma list, or '0,1'")
+    p.add_argument("--project", default="runs")
+    p.add_argument("--name", default="detect")
+    p.add_argument("--exist-ok", action="store_true")
+    p.add_argument("--patience", type=int, default=50)
+    p.set_defaults(func=cmd_train)
+
+    p = sub.add_parser("record-screen", help="record a screen region to a video (ESC stops)")
+    p.add_argument("out_path", help="output video file, e.g. screen.mp4")
+    p.add_argument("--region", help="JSON region dict {top,left,width,height}")
+    p.add_argument("--duration", type=float, default=0,
+                   help="max seconds to record (0 = until ESC)")
+    p.add_argument("--fps", type=float, default=20.0)
+    p.add_argument("--codec", default="mp4v")
+    p.set_defaults(func=cmd_record_screen)
+
+    p = sub.add_parser("webcam-capture",
+                       help="webcam preview; r=record toggle, s=snapshot, q=quit")
+    p.add_argument("--camera", type=int, default=0)
+    p.add_argument("--out-path", help="recording destination (default webcam_<ts>.mp4)")
+    p.add_argument("--duration", type=float, default=0)
+    p.add_argument("--fps", type=float, default=20.0)
+    p.add_argument("--codec", default="mp4v")
+    p.add_argument("--save-dir", default="snapshots")
+    p.set_defaults(func=cmd_webcam_capture)
+
+    p = sub.add_parser("augment", help="augment images in a directory (hflip/vflip/rot/bright/etc.)")
+    p.add_argument("in_dir")
+    p.add_argument("out_dir", nargs="?")
+    p.add_argument("--ext", default="jpg")
+    p.add_argument("--ops", nargs="+",
+                   help="ops to apply (default all): hflip vflip rot90 rot180 "
+                        "rot270 blur bright hue")
+    p.set_defaults(func=cmd_augment)
+
+    p = sub.add_parser("record-audio",
+                       help="record the mic to a mono WAV (voice cloning prep)")
+    p.add_argument("out", help="output wav path")
+    p.add_argument("--duration", type=float, default=0,
+                   help="seconds to record (0 = until Enter)")
+    p.add_argument("--sr", type=int, default=16000)
+    p.add_argument("--device", type=int, help="sounddevice input index")
+    p.set_defaults(func=cmd_record_audio)
+
+    p = sub.add_parser("live-transcribe",
+                       help="stream-transcribe the mic with faster-whisper")
+    p.add_argument("--duration", type=float, default=60,
+                   help="total seconds (0 = until Ctrl+C)")
+    p.add_argument("--chunk", type=float, default=5, help="seconds per window")
+    p.add_argument("--model", default="base")
+    p.add_argument("--language", help="audio language code (default auto)")
+    p.add_argument("--out-dir", default="live_segments")
+    p.add_argument("--gpus", help="comma-separated physical GPU indices")
+    p.set_defaults(func=cmd_live_transcribe)
+
+    p = sub.add_parser("tts-batch",
+                       help="synthesize one wav per line of a text file")
+    p.add_argument("text_file")
+    p.add_argument("--out-dir", default="tts_output")
+    p.add_argument("--model", default="tts_models/multilingual/multi-dataset/xtts_v2")
+    p.add_argument("--speaker", help="reference wav for voice cloning (XTTS)")
+    p.add_argument("--language", default="en")
+    p.add_argument("--prefix", default="line")
+    p.add_argument("--metadata", help="also write a Coqui metadata.csv path "
+                                      "(e.g. metadata.csv)")
+    p.add_argument("--gpus", help="comma-separated physical GPU indices")
+    p.set_defaults(func=cmd_tts_batch)
+
+    p = sub.add_parser("narrate",
+                       help="synthesize each line of a text file and play it")
+    p.add_argument("text_file")
+    p.add_argument("--out-dir", help="keep generated wavs in this directory")
+    p.add_argument("--model", default="tts_models/multilingual/multi-dataset/xtts_v2")
+    p.add_argument("--speaker", help="reference wav for voice cloning (XTTS)")
+    p.add_argument("--language", default="en")
+    p.add_argument("--gpus", help="comma-separated physical GPU indices")
+    p.set_defaults(func=cmd_narrate)
+
+    p = sub.add_parser("benchmark",
+                       help="measure STT/YOLO latency per GPU")
+    p.add_argument("--audio", help="audio file to transcribe")
+    p.add_argument("--image", help="image file to run YOLO on")
+    p.add_argument("--engines", nargs="+", choices=["whisper", "faster"],
+                   default=["faster"])
+    p.add_argument("--model", default="base", help="whisper size or YOLO weights")
+    p.add_argument("--iterations", type=int, default=3)
+    p.add_argument("--gpus", help="comma-separated physical GPU indices "
+                                  "(default: all detected)")
+    p.add_argument("--cpu", action="store_true", help="also benchmark CPU")
+    p.set_defaults(func=cmd_benchmark)
+
+    p = sub.add_parser("ocr", help="OCR an image or screen region "
+                                   "(Windows.Media.Ocr)")
+    p.add_argument("image", nargs="?", help="image file (omit for screen)")
+    p.add_argument("--region", help="JSON region dict {top,left,width,height}")
+    p.add_argument("--language", default="en")
+    p.add_argument("--lines", action="store_true", help="print per-line detail")
+    p.set_defaults(func=cmd_ocr)
+
+    p = sub.add_parser("voice-convert", help="RVC voice conversion (rvc-python)")
+    p.add_argument("input")
+    p.add_argument("output")
+    p.add_argument("model", help="path to an RVC v2 .pth model")
+    p.add_argument("--index", help="optional feature index .index file")
+    p.add_argument("--device", help="e.g. 'cuda:0' or 'cpu' (default auto)")
+    p.add_argument("--f0", default="rmvpe", choices=["rmvpe", "crepe", "pm"],
+                   help="pitch extraction method")
+    p.add_argument("--index-rate", type=float, default=0.75)
+    p.add_argument("--protect", type=float, default=0.33)
+    p.add_argument("--pitch", type=int, default=0,
+                   help="semitone shift, e.g. 12 = one octave up")
+    p.add_argument("--gpus", help="comma-separated physical GPU indices")
+    p.set_defaults(func=cmd_voice_convert)
+
+    p = sub.add_parser("diarize", help="speaker diarization (pyannote, HF token)")
+    p.add_argument("audio")
+    p.add_argument("--out", help="write an RTTM file here")
+    p.add_argument("--token", help="HF token (or HF_TOKEN env var)")
+    p.add_argument("--min-speakers", type=int)
+    p.add_argument("--max-speakers", type=int)
+    p.add_argument("--gpus", help="comma-separated physical GPU indices")
+    p.set_defaults(func=cmd_diarize)
 
     return parser
 
