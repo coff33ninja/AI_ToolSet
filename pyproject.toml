@@ -1,0 +1,46 @@
+[project]
+name = "ai-toolset"
+version = "0.1.0"
+description = "Reusable AI toolkit: project-local CUDA/cuDNN provisioning, screen capture, video frame tools, synthetic dataset generation, image/label utilities, and voice-cloning dataset prep for GPU-accelerated ML projects."
+readme = "README.md"
+requires-python = ">=3.10,<3.11"
+dependencies = [
+    "numpy==1.23.5",
+    "tensorflow==2.10",
+    "keras==2.10",
+    "opencv-python==4.10.0.84",
+    "Pillow",
+    "mss",
+    "pyautogui",
+    "pyzmq",
+]
+
+[project.optional-dependencies]
+# Voice cloning / TTS stack (RVC, XTTS v2, so-vits-svc). torch + torchaudio
+# resolve from the official PyTorch CUDA 11.8 wheel index via [tool.uv.sources]
+# below - nothing is installed system-wide, everything lives in .venv.
+# Install with: uv sync --extra voice
+voice = [
+    "torch",
+    "torchaudio",
+    "librosa<0.11",
+    "soundfile",
+]
+
+[dependency-groups]
+dev = ["ruff"]
+
+[tool.uv]
+package = false
+
+[[tool.uv.index]]
+# PyTorch CUDA 11.8 wheels bundle CUDA/cuDNN inside the wheel (torch/lib) -
+# no system CUDA toolkit, no DLL downloads, just a recent NVIDIA driver.
+# explicit = true keeps this index from contaminating normal package resolution.
+name = "pytorch-cu118"
+url = "https://download.pytorch.org/whl/cu118"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu118" }
+torchaudio = { index = "pytorch-cu118" }

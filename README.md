@@ -1,0 +1,210 @@
+# AI ToolSet
+
+Reusable toolkit for GPU-accelerated machine learning projects on Windows. It
+solves the two things every local TF/PyTorch project trips over:
+
+1. **CUDA works without guessing** - `scripts/get_cuda_runtime.ps1` figures
+   out which CUDA/cuDNN runtime your TensorFlow version needs, downloads the
+   exact builds into a project-local `cuda_runtime/` folder, and wires it up.
+   No system-wide CUDA toolkit install, no version guessing, no broken GPU.
+   The same script covers **PyTorch voice cloning** with a driver-only check
+   (torch wheels bundle their own CUDA/cuDNN - nothing is installed globally).
+2. **A grab-bag of reusable helpers** - screen capture, video frame
+   extraction/stitching, synthetic detection datasets, image/label
+   utilities, and **voice-cloning dataset prep**, all importable from one
+   package.
+
+The pattern was extracted from
+[poke.AI](https://github.com/coff33ninja/poke.AI), which runs TensorFlow 2.10
+with native Windows GPU support via this exact mechanism.
+
+## Why project-local CUDA?
+
+TensorFlow 2.10 is the last TF with native Windows GPU support. It needs the
+CUDA 11.2 + cuDNN 8.1 runtime DLLs on `PATH`, but you do not need (and
+should not want) a full system CUDA install just to run training. This
+toolkit keeps the DLLs in `cuda_runtime/bin` and prepends that folder to
+`PATH` at every interpreter start via `sitecustomize.py`.
+
+Nothing is guessed:
+
+- The TensorFlow -> CUDA/cuDNN mapping is a verified table (below).
+- The `cudatoolkit` download URL is resolved **live from the conda-forge
+  API**, so build hashes never rot in this repo.
+- cuDNN always comes from the **official NVIDIA redistributable** - conda
+  builds of cuDNN crash TensorFlow 2.10 with `0xC0000409` on the first GPU op.
+- Your NVIDIA driver version is checked against the CUDA minimum and you get
+  a warning if it is too old.
+
+| TensorFlow | CUDA | cuDNN | min. driver |
+|------------|------|-------|-------------|
+| 2.4        | 11.0 | 8.0.5.39 | 451.82 |
+| 2.5 - 2.10 | 11.2 | 8.1.0.77 | 460.89 |
+
+## Quickstart
+
+Prerequisites: Windows 10/11, an NVIDIA GPU (9-series+), updated drivers,
+[uv](https://docs.astral.sh/uv/), and Git.
+
+```powershell
+uv sync                                      # creates .venv (Python 3.10 + TF 2.10)
+powershell -ExecutionPolicy Bypass -File scripts/get_cuda_runtime.ps1
+powershell -ExecutionPolicy Bypass -File scripts/verify_cuda.ps1 -RunTensorFlowCheck
+```
+
+The last command prints your GPU, driver, runtime DLL status, and whether
+TensorFlow actually sees the GPU. Expected output ends with:
+
+```
+[PhysicalDevice(name="/physical_device:GPU:0", device_type="GPU")]
+```
+
+For a different TensorFlow version, pass it through and the script resolves
+the matching runtime:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/get_cuda_runtime.ps1 -TensorFlowVersion 2.4
+```
+
+Or override the runtime explicitly:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/get_cuda_runtime.ps1 -CudaVersion 11.2 -CudnnVersion 8.1.0.77
+```
+
+## Voice cloning (PyTorch stack)
+
+The same project-local philosophy covers voice cloning and TTS (RVC,
+XTTS v2, so-vits-svc). Everything stays inside `.venv` - **never a global
+install**.
+
+PyTorch differs from TensorFlow on Windows: its CUDA wheels **bundle** the
+CUDA + cuDNN runtime inside `torch/lib`, so there is nothing to download.
+The only system requirement is a recent NVIDIA driver. Install the voice
+extra, then let the script verify:
+
+```powershell
+uv sync --extra voice                                     # torch + torchaudio + librosa + soundfile into .venv
+powershell -ExecutionPolicy Bypass -File scripts/get_cuda_runtime.ps1 -Framework pytorch
+powershell -ExecutionPolicy Bypass -File scripts/verify_cuda.ps1 -CheckTorch
+```
+
+`get_cuda_runtime.ps1 -Framework pytorch` checks your driver against the
+CUDA 11.8 minimum (452.39), downloads nothing, and reports whether the
+installed torch sees the GPU. `torch`/`torchaudio` resolve from the official
+`download.pytorch.org/whl/cu118` index via `[tool.uv.sources]` - the cu118
+wheels keep Pascal-and-newer GPUs (GTX 10-series included) working.
+
+### Dataset prep
+
+RVC/so-vits-svc want a folder of clean, resampled speech segments before
+training. The toolkit automates that:
+
+```powershell
+uv run python -m ai_toolset audio-probe RAW/                       # see what you have
+uv run python -m ai_toolset audio-resample RAW/ CLEAN/ --sr 48000  # -> 48 kHz mono WAV
+uv run python -m ai_toolset audio-silence clip.wav SEGS/           # split one file on silence
+uv run python -m ai_toolset audio-rvc CLEAN/ RVC_DATA/ --speaker 0 # -> 0_000000.wav ...
+```
+
+or as one pipeline:
+
+```powershell
+uv run python examples/prepare_voice_dataset.py RAW/ RVC_DATA/ --speaker 0
+```
+
+`audio-rvc` splits each recording on silence (merging short gaps, hard-capping
+segments at `--max-sec`) and writes `<speaker>_<index>.wav`, the naming the
+RVC webui expects for preprocessing. Point the webui's dataset folder at the
+output and its training tab at your model folder - both run locally from your
+venv.
+
+## Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/get_cuda_runtime.ps1` | Download + extract CUDA/cuDNN DLLs into `cuda_runtime/bin`, install `sitecustomize.py` into the venv. Idempotent. With `-Framework pytorch`: driver-only check, no downloads. |
+| `scripts/verify_cuda.ps1` | Report GPU/driver status, runtime DLL count, real TF GPU detection (`-RunTensorFlowCheck`), and torch GPU detection (`-CheckTorch`). |
+
+## Python package
+
+Everything is importable as `ai_toolset` from the repo root:
+
+```python
+from ai_toolset import cuda, screen, video, dataset, images
+```
+
+A CLI wraps the common operations:
+
+```powershell
+uv run python -m ai_toolset --help
+uv run python -m ai_toolset verify-cuda
+uv run python -m ai_toolset select-gpus --gpus 0,1      # both GPUs
+uv run python -m ai_toolset select-gpus --gpus 1        # only the second
+uv run python -m ai_toolset extract-frames gameplay.mp4 frames --count 200
+uv run python -m ai_toolset frames-to-video frames out.mp4 --fps 30
+uv run python -m ai_toolset make-synthetic --classes "npc:50,50,220;house:43,90,139"
+uv run python -m ai_toolset xml-to-csv labels/ labels.csv
+uv run python -m ai_toolset select-region
+uv run python -m ai_toolset capture-loop --out-dir frames --square
+uv run python -m ai_toolset audio-rvc CLEAN/ RVC_DATA/ --speaker 0
+```
+
+### GPU selection
+
+On multi-GPU machines (e.g. GTX 1060 + GTX 1070) you can use both GPUs or
+pin training to one. The selection must happen **before** `tensorflow`/`torch`
+are imported, so it is applied via `CUDA_VISIBLE_DEVICES`:
+
+```python
+from ai_toolset import cuda
+
+cuda.set_visible_gpus([0, 1])   # both GPUs
+# cuda.set_visible_gpus([1])    # only the second GPU
+# cuda.set_visible_gpus()       # all GPUs
+
+cuda.configure_tf_gpus()        # after import: memory growth + visible set
+```
+
+Or use the CLI (interactive when multiple GPUs and `--gpus` omitted):
+
+```powershell
+uv run python -m ai_toolset select-gpus --gpus 0,1
+uv run python examples/select_gpu.py --gpus 0,1 --framework auto
+```
+
+`detect_gpus()` lists `{index, name, driver, vram}` per physical GPU;
+`verify_torch_gpu()` reports the CUDA devices PyTorch sees.
+
+### Modules
+
+- `cuda` - `detect_gpus()`, `detect_gpu()`, `matrix_entry(tf_version)`,
+  `set_visible_gpus()`, `configure_tf_gpus()`, `configure_memory_growth()`,
+  `verify_tf_gpu()`, `verify_torch_gpu()`
+- `screen` - `capture(region)`, `capture_square()`, `select_region()`,
+  `stream_frames()`
+- `video` - `extract_frames()`, `frames_to_video()`
+- `images` - `pad_to_square()`, `pad_images_in_dir()`, `split_quadrants()`,
+  `split_image_dataset()`, `xml_to_csv()`
+- `dataset` - `generate_synthetic()` - writes images + keras-retinanet CSV
+  labels for pipeline smoke-testing on the GPU
+- `audio` - `probe_dir()`, `resample_dir()`, `split_on_silence()`,
+  `make_rvc_dataset()` - voice-cloning dataset prep (requires
+  `uv sync --extra voice`)
+
+See `examples/verify_gpu.py`, `examples/make_synthetic_dataset.py`,
+`examples/select_gpu.py`, and `examples/prepare_voice_dataset.py`.
+
+## How it works
+
+1. `uv sync` installs TensorFlow 2.10 (GPU wheels) into `.venv`.
+2. `get_cuda_runtime.ps1` reads the mapping table, resolves the exact
+   `cudatoolkit` archive from the conda-forge API, downloads cuDNN from
+   NVIDIA's redist server, extracts the DLLs into `cuda_runtime/bin`, and
+   copies `sitecustomize.py` into the venv's site-packages.
+3. At every interpreter start, `sitecustomize.py` prepends
+   `cuda_runtime/bin` to `PATH`. TensorFlow finds `cudart64_110.dll` /
+   `cudnn64_8.dll` there and loads the GPU plugin.
+
+Set `AI_TOOLSET_CUDA_RUNTIME` to point at a `bin` folder to bypass the
+auto-discovery (e.g. an already-populated shared runtime).
