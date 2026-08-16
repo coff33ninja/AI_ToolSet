@@ -21,3 +21,8 @@ data/
 smoke_data/det_out.png
 smoke_data/tts_out/
 yolov8n.pt
+
+# Smoke-test artifacts (kept on disk, no longer tracked)
+ocr_test.png
+test_tts.wav
+aug_out/

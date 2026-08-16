@@ -48,15 +48,15 @@ def transcribe_whisper(audio_path, model="base", language=None, device=None,
     )
 
 
-def transcribe_faster(audio_path, model="base", language=None, device="auto",
-                      compute_type="auto", beam_size=5, vad_filter=True,
-                      condition_on_previous_text=True, gpus=None):
-    """Transcribe audio with faster-whisper (CTranslate2 backend).
+def load_faster_model(model="base", device="auto", compute_type="auto",
+                      gpus=None):
+    """Build a faster-whisper WhisperModel with GPU + compute-type detection.
 
     device "auto" selects cuda when CTranslate2 sees a usable GPU, else cpu.
-    compute_type "auto" = float16 on cuda, int8 on cpu. Returns
-    (segments, info); segments is a fully materialized list so transcription
-    runs before returning.
+    compute_type "auto" = float16 on cuda, int8 on cpu. Returns the loaded
+    WhisperModel. Reused by transcribe_faster, transcribe_live, and the
+    Streamlit STT tab (which caches it) so every path shares the same
+    Pascal-aware detection.
     """
     _apply_gpus(gpus)
     from faster_whisper import WhisperModel
@@ -76,7 +76,21 @@ def transcribe_faster(audio_path, model="base", language=None, device="auto",
             compute_type = "float32"
         else:
             compute_type = "int8"
-    loaded = WhisperModel(model, device=device, compute_type=compute_type)
+    return WhisperModel(model, device=device, compute_type=compute_type)
+
+
+def transcribe_faster(audio_path, model="base", language=None, device="auto",
+                      compute_type="auto", beam_size=5, vad_filter=True,
+                      condition_on_previous_text=True, gpus=None):
+    """Transcribe audio with faster-whisper (CTranslate2 backend).
+
+    device "auto" selects cuda when CTranslate2 sees a usable GPU, else cpu.
+    compute_type "auto" = float16 on cuda, int8 on cpu. Returns
+    (segments, info); segments is a fully materialized list so transcription
+    runs before returning.
+    """
+    loaded = load_faster_model(model, device=device, compute_type=compute_type,
+                               gpus=gpus)
     segments, info = loaded.transcribe(
         audio_path, language=language, beam_size=beam_size,
         vad_filter=vad_filter,
@@ -260,9 +274,7 @@ def transcribe_live(duration=60, chunk=5, model="base", language=None,
             final_path = os.path.join(out_dir, f"live_seg_{n:04d}.wav")
             os.replace(path, final_path)
             if loaded is None:
-                _apply_gpus(gpus)
-                from faster_whisper import WhisperModel
-                loaded = WhisperModel(model, device="cpu", compute_type="int8")
+                loaded = load_faster_model(model, gpus=gpus)
             segments, info = loaded.transcribe(final_path, language=language)
             text = " ".join(s.text.strip() for s in segments).strip()
             print(f"[{info.language} p={info.language_probability:.2f}] {text or '(silence)'}")

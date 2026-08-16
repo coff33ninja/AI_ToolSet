@@ -243,8 +243,10 @@ uv run python -m ai_toolset ui     # launches Streamlit (opens browser)
 The FastAPI dashboard (`webapp.py` + `ai_toolset/web/`) has tabs for status,
 OCR, YOLO detection, transcription, TTS, latency benchmarks, and a webcam
 stream with a mediapipe overlay dropdown. GPU multi-select drives every
-model call. The Streamlit app (`streamlit_app.py`) is the same feature set in
-a lighter wrapper, plus a model-downloads tab.
+model call. The Streamlit app (`streamlit_app.py`) covers the same core
+features in a lighter wrapper — STT/TTS/detection/OCR plus latency
+benchmarks, a MediaPipe webcam overlay, mic recording / live transcription,
+batch TTS, video detection, and a model-downloads tab.
 
 ### Model downloads
 
