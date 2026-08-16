@@ -34,18 +34,20 @@ def _to_detections(result, names):
     xyxy = result.boxes.xyxy.cpu().numpy()
     conf = result.boxes.conf.cpu().numpy()
     cls = result.boxes.cls.cpu().numpy().astype(int)
-    for x1, y1, x2, y2, c, p in zip(xyxy[:, 0], xyxy[:, 1],
-                                    xyxy[:, 2], xyxy[:, 3], cls, conf):
-        detections.append({
-            "label": names.get(c, str(c)),
-            "conf": float(p),
-            "box": [int(x1), int(y1), int(x2), int(y2)],
-        })
+    for x1, y1, x2, y2, c, p in zip(
+        xyxy[:, 0], xyxy[:, 1], xyxy[:, 2], xyxy[:, 3], cls, conf, strict=True
+    ):
+        detections.append(
+            {
+                "label": names.get(c, str(c)),
+                "conf": float(p),
+                "box": [int(x1), int(y1), int(x2), int(y2)],
+            }
+        )
     return detections
 
 
-def detect_image(path, weights=DEFAULT_WEIGHTS, conf=DEFAULT_CONF,
-                 device="auto", gpus=None):
+def detect_image(path, weights=DEFAULT_WEIGHTS, conf=DEFAULT_CONF, device="auto", gpus=None):
     """Run YOLO on an image file. Returns (detections, annotated-image-path).
 
     When device is None/'auto', the model is left on ultralytics' default
@@ -58,8 +60,7 @@ def detect_image(path, weights=DEFAULT_WEIGHTS, conf=DEFAULT_CONF,
     return _to_detections(result, model.names), result
 
 
-def detect_frame(frame, weights=DEFAULT_WEIGHTS, conf=DEFAULT_CONF,
-                 gpus=None, model=None):
+def detect_frame(frame, weights=DEFAULT_WEIGHTS, conf=DEFAULT_CONF, gpus=None, model=None):
     """Run YOLO on a BGR numpy frame.
 
     Pass a previously loaded `model` to reuse it across frames (model loading
@@ -77,13 +78,15 @@ def draw_detections(frame, detections, label_color=(0, 255, 0)):
         x1, y1, x2, y2 = det["box"]
         cv2.rectangle(frame, (x1, y1), (x2, y2), label_color, 2)
         text = f"{det['label']} {det['conf']:.2f}"
-        cv2.putText(frame, text, (x1, max(18, y1 - 6)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, label_color, 2)
+        cv2.putText(
+            frame, text, (x1, max(18, y1 - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, label_color, 2
+        )
     return frame
 
 
-def detect_stream(region=None, weights=DEFAULT_WEIGHTS, conf=DEFAULT_CONF,
-                  gpus=None, fps_window=30):
+def detect_stream(
+    region=None, weights=DEFAULT_WEIGHTS, conf=DEFAULT_CONF, gpus=None, fps_window=30
+):
     """Yield (frame, detections, fps) for a live screen region.
 
     Loads the model once, then captures frames via ai_toolset.screen and runs
@@ -104,8 +107,7 @@ def detect_stream(region=None, weights=DEFAULT_WEIGHTS, conf=DEFAULT_CONF,
         yield frame, detections, fps
 
 
-def annotate(path, out_path=None, weights=DEFAULT_WEIGHTS, conf=DEFAULT_CONF,
-             gpus=None):
+def annotate(path, out_path=None, weights=DEFAULT_WEIGHTS, conf=DEFAULT_CONF, gpus=None):
     """Detect on an image and write an annotated copy. Returns out_path."""
     detections, _ = detect_image(path, weights=weights, conf=conf, gpus=gpus)
     frame = cv2.imread(path)

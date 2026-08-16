@@ -26,7 +26,10 @@ def detect_gpus():
     try:
         out = subprocess.run(
             [smi, "--query-gpu=driver_version,name,memory.total", "--format=csv,noheader"],
-            capture_output=True, text=True, timeout=15, check=True,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=True,
         )
     except (subprocess.SubprocessError, OSError):
         return []
@@ -37,8 +40,9 @@ def detect_gpus():
         parts = [p.strip() for p in line.split(",")]
         if len(parts) < 3:
             continue
-        result.append({"index": index, "name": parts[1],
-                       "driver": float(parts[0]), "vram": parts[2]})
+        result.append(
+            {"index": index, "name": parts[1], "driver": float(parts[0]), "vram": parts[2]}
+        )
     return result
 
 

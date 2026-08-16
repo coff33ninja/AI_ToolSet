@@ -133,8 +133,9 @@ def create_app(gpus=None):
         return {"cameras": found}
 
     @app.post("/api/ocr")
-    def ocr(image: UploadFile | None = None, screen: bool = Form(False),
-            language: str = Form("en")):
+    def ocr(
+        image: UploadFile | None = None, screen: bool = Form(False), language: str = Form("en")
+    ):
         from ai_toolset.ocr import ocr_image, ocr_screen
 
         try:
@@ -155,8 +156,12 @@ def create_app(gpus=None):
             raise HTTPException(500, str(exc)) from exc
 
     @app.post("/api/detect")
-    def detect(image: UploadFile, weights: str = Form(DEFAULT_WEIGHTS),
-               conf: float = Form(0.25), gpus_sel: str | None = Form(None)):
+    def detect(
+        image: UploadFile,
+        weights: str = Form(DEFAULT_WEIGHTS),
+        conf: float = Form(0.25),
+        gpus_sel: str | None = Form(None),
+    ):
         from ai_toolset.detect import detect_frame, draw_detections
 
         path = _save_upload(image, os.path.splitext(image.filename or "x")[1])
@@ -167,33 +172,41 @@ def create_app(gpus=None):
             if frame is None:
                 raise HTTPException(400, f"could not decode image {image.filename}")
             model = _yolo_model(weights)
-            detections = detect_frame(frame, weights=weights, conf=conf,
-                                      model=model, gpus=_gpus_from(gpus_sel))
+            detections = detect_frame(
+                frame, weights=weights, conf=conf, model=model, gpus=_gpus_from(gpus_sel)
+            )
             draw_detections(frame, detections)
             ok, buf = cv2.imencode(".jpg", frame)
             if not ok:
                 raise HTTPException(500, "could not encode annotated image")
-            return {"detections": detections,
-                    "annotated_b64": base64.b64encode(buf.tobytes()).decode()}
+            return {
+                "detections": detections,
+                "annotated_b64": base64.b64encode(buf.tobytes()).decode(),
+            }
         finally:
             os.remove(path)
 
     @app.post("/api/transcribe")
-    def transcribe(audio: UploadFile, model: str = Form(DEFAULT_WHISPER),
-                   language: str | None = Form(None),
-                   gpus_sel: str | None = Form(None)):
+    def transcribe(
+        audio: UploadFile,
+        model: str = Form(DEFAULT_WHISPER),
+        language: str | None = Form(None),
+        gpus_sel: str | None = Form(None),
+    ):
         from ai_toolset.speech import transcribe_faster
 
         path = _save_upload(audio, ".wav")
         try:
             segments, info = transcribe_faster(
-                path, model=model, language=language, gpus=_gpus_from(gpus_sel))
+                path, model=model, language=language, gpus=_gpus_from(gpus_sel)
+            )
             return {
                 "text": "\n".join(s.text.strip() for s in segments),
                 "language": info.language,
                 "language_probability": info.language_probability,
-                "segments": [{"start": s.start, "end": s.end, "text": s.text.strip()}
-                             for s in segments],
+                "segments": [
+                    {"start": s.start, "end": s.end, "text": s.text.strip()} for s in segments
+                ],
             }
         except Exception as exc:
             raise HTTPException(500, str(exc)) from exc
@@ -201,9 +214,13 @@ def create_app(gpus=None):
             os.remove(path)
 
     @app.post("/api/tts")
-    def tts(text: str = Form(...), model: str = Form(DEFAULT_TTS),
-            language: str = Form("en"), speaker: UploadFile | None = None,
-            gpus_sel: str | None = Form(None)):
+    def tts(
+        text: str = Form(...),
+        model: str = Form(DEFAULT_TTS),
+        language: str = Form("en"),
+        speaker: UploadFile | None = None,
+        gpus_sel: str | None = Form(None),
+    ):
         from ai_toolset.speech import synthesize_tts
 
         speaker_path = None
@@ -212,13 +229,18 @@ def create_app(gpus=None):
         try:
             fd, out = tempfile.mkstemp(suffix=".wav")
             os.close(fd)
-            synthesize_tts(text, out, model_name=model, language=language,
-                           speaker_wav=speaker_path, gpus=_gpus_from(gpus_sel))
+            synthesize_tts(
+                text,
+                out,
+                model_name=model,
+                language=language,
+                speaker_wav=speaker_path,
+                gpus=_gpus_from(gpus_sel),
+            )
             with open(out, "rb") as f:
                 data = f.read()
             os.remove(out)
-            return StreamingResponse(io.BytesIO(data),
-                                     media_type="audio/wav")
+            return StreamingResponse(io.BytesIO(data), media_type="audio/wav")
         except Exception as exc:
             raise HTTPException(500, str(exc)) from exc
         finally:
@@ -226,9 +248,11 @@ def create_app(gpus=None):
                 os.remove(speaker_path)
 
     @app.post("/api/benchmark")
-    def benchmark(image: UploadFile | None = None,
-                  gpus_sel: str | None = Form(None),
-                  iterations: int = Form(3)):
+    def benchmark(
+        image: UploadFile | None = None,
+        gpus_sel: str | None = Form(None),
+        iterations: int = Form(3),
+    ):
         from ai_toolset.benchmark import benchmark_stt, benchmark_yolo
 
         sel = _gpus_from(gpus_sel) or [None]
@@ -236,19 +260,21 @@ def create_app(gpus=None):
         if image is not None:
             path = _save_upload(image, os.path.splitext(image.filename or "x")[1])
             try:
-                rows.extend(benchmark_yolo(path, weights=DEFAULT_WEIGHTS,
-                                           iterations=iterations, gpus=sel))
+                rows.extend(
+                    benchmark_yolo(path, weights=DEFAULT_WEIGHTS, iterations=iterations, gpus=sel)
+                )
             finally:
                 os.remove(path)
         else:
-            rows.extend(benchmark_stt(None, engine="faster",
-                                      model=DEFAULT_WHISPER,
-                                      iterations=iterations, gpus=sel))
+            rows.extend(
+                benchmark_stt(
+                    None, engine="faster", model=DEFAULT_WHISPER, iterations=iterations, gpus=sel
+                )
+            )
         return {"rows": rows}
 
     @app.get("/api/webcam.mjpg")
-    def webcam(camera: int = 0, solution: str = "pose", mirror: int = 1,
-               quality: int = 80):
+    def webcam(camera: int = 0, solution: str = "pose", mirror: int = 1, quality: int = 80):
         if solution not in ("none", "pose", "hands", "face", "holistic", "selfie"):
             raise HTTPException(400, f"bad solution '{solution}'")
         import cv2
@@ -269,21 +295,17 @@ def create_app(gpus=None):
                     if not ok:
                         break
                     if solution != "none":
-                        frame = mp_overlay(frame, solution=solution,
-                                           mirror=bool(mirror))
+                        frame = mp_overlay(frame, solution=solution, mirror=bool(mirror))
                     elif mirror:
                         frame = cv2.flip(frame, 1)
-                    ok, buf = cv2.imencode(".jpg", frame,
-                                           [int(cv2.IMWRITE_JPEG_QUALITY), quality])
+                    ok, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
                     if not ok:
                         continue
-                    yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
-                           + buf.tobytes() + b"\r\n")
+                    yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + buf.tobytes() + b"\r\n")
             finally:
                 cap.release()
 
-        return StreamingResponse(
-            stream(), media_type="multipart/x-mixed-replace; boundary=frame")
+        return StreamingResponse(stream(), media_type="multipart/x-mixed-replace; boundary=frame")
 
     return app
 
@@ -310,8 +332,8 @@ def main(argv=None):
     load_env()
 
     parser = argparse.ArgumentParser(
-        prog="python -m ai_toolset web",
-        description="Serve the AI ToolSet web dashboard.")
+        prog="python -m ai_toolset web", description="Serve the AI ToolSet web dashboard."
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--open", action="store_true", help="open the browser")

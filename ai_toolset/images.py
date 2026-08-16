@@ -58,16 +58,18 @@ def _read_labels(csv_path):
         for line in csv.reader(f):
             if len(line) < 8 or line[0] == "filename":
                 continue
-            rows.append({
-                "filename": line[0],
-                "width": int(line[1]),
-                "height": int(line[2]),
-                "class": line[3],
-                "xmin": int(line[4]),
-                "ymin": int(line[5]),
-                "xmax": int(line[6]),
-                "ymax": int(line[7]),
-            })
+            rows.append(
+                {
+                    "filename": line[0],
+                    "width": int(line[1]),
+                    "height": int(line[2]),
+                    "class": line[3],
+                    "xmin": int(line[4]),
+                    "ymin": int(line[5]),
+                    "xmax": int(line[6]),
+                    "ymax": int(line[7]),
+                }
+            )
     return rows
 
 
@@ -110,8 +112,12 @@ def split_image_dataset(image_dir, labels_csv, out_dir, min_area_ratio=0.25):
                     continue
                 xmin, ymin = label["xmin"], label["ymin"]
                 xmax, ymax = label["xmax"], label["ymax"]
-                if not (xmin < seg_w[xi + 1] and xmax > seg_w[xi]
-                        and ymin < seg_h[yi + 1] and ymax > seg_h[yi]):
+                if not (
+                    xmin < seg_w[xi + 1]
+                    and xmax > seg_w[xi]
+                    and ymin < seg_h[yi + 1]
+                    and ymax > seg_h[yi]
+                ):
                     continue
                 nx1 = max(xmin, seg_w[xi]) - seg_w[xi]
                 nx2 = min(xmax, seg_w[xi + 1]) - seg_w[xi]
@@ -140,14 +146,16 @@ def xml_to_csv(xml_dir, out_csv):
             bbox = obj.find("bndbox")
             if bbox is None or name is None:
                 continue
-            rows.append((
-                root.findtext("filename"),
-                int(bbox.findtext("xmin")),
-                int(bbox.findtext("ymin")),
-                int(bbox.findtext("xmax")),
-                int(bbox.findtext("ymax")),
-                name,
-            ))
+            rows.append(
+                (
+                    root.findtext("filename"),
+                    int(bbox.findtext("xmin")),
+                    int(bbox.findtext("ymin")),
+                    int(bbox.findtext("xmax")),
+                    int(bbox.findtext("ymax")),
+                    name,
+                )
+            )
     with open(out_csv, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["path", "xmin", "ymin", "xmax", "ymax", "class"])
@@ -167,7 +175,7 @@ _AUGMENT_OPS = {
 
 def _brightness_contrast(img):
     alpha = float(np.random.uniform(0.7, 1.3))  # contrast
-    beta = int(np.random.uniform(-40, 40))       # brightness
+    beta = int(np.random.uniform(-40, 40))  # brightness
     return cv2.convertScaleAbs(img, alpha=alpha, beta=beta)
 
 

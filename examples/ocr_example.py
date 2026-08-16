@@ -13,8 +13,9 @@ from ai_toolset import ocr
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("image", nargs="?", help="image file to OCR")
-    parser.add_argument("--screen", action="store_true",
-                        help="OCR the full desktop instead of a file")
+    parser.add_argument(
+        "--screen", action="store_true", help="OCR the full desktop instead of a file"
+    )
     parser.add_argument("--language", default="en")
     args = parser.parse_args()
 

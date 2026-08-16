@@ -12,8 +12,18 @@ import cv2
 import numpy as np
 
 
-def generate_synthetic(classes, out_dir, img_size=320, n_train=40, n_val=12,
-                       seed=42, min_boxes=3, max_boxes=8, min_size=24, max_size=56):
+def generate_synthetic(
+    classes,
+    out_dir,
+    img_size=320,
+    n_train=40,
+    n_val=12,
+    seed=42,
+    min_boxes=3,
+    max_boxes=8,
+    min_size=24,
+    max_size=56,
+):
     """Generate a synthetic detection dataset.
 
     classes: dict class_name -> BGR color tuple, e.g. {"npc": (50, 50, 220)}.
@@ -42,19 +52,26 @@ def generate_synthetic(classes, out_dir, img_size=320, n_train=40, n_val=12,
             y1 = rng.randint(8, img_size - h - 8)
             x2 = x1 + w
             y2 = y1 + h
-            if any(not (x2 < bx1 or bx2 < x1 or y2 < by1 or by2 < y1) for bx1, by1, bx2, by2, _ in boxes):
+            if any(
+                not (x2 < bx1 or bx2 < x1 or y2 < by1 or by2 < y1)
+                for bx1, by1, bx2, by2, _ in boxes
+            ):
                 continue
             cls = rng.choice(list(classes.keys()))
             boxes.append((x1, y1, x2, y2, cls))
             cv2.rectangle(img, (x1, y1), (x2, y2), classes[cls], thickness=-1)
         cv2.imwrite(out_path, img)
         for x1, y1, x2, y2, cls in boxes:
-            labels_out.append("{},{},{},{},{},{}".format(
-                os.path.relpath(out_path, data_dir).replace("\\", "/"),
-                x1, y1, x2, y2, cls))
+            labels_out.append(
+                "{},{},{},{},{},{}".format(
+                    os.path.relpath(out_path, data_dir).replace("\\", "/"), x1, y1, x2, y2, cls
+                )
+            )
 
-    for split, count, labels_file in (("train", n_train, "train_labels.csv"),
-                                      ("val", n_val, "val_labels.csv")):
+    for split, count, labels_file in (
+        ("train", n_train, "train_labels.csv"),
+        ("val", n_val, "val_labels.csv"),
+    ):
         labels_out = []
         for i in range(count):
             out_path = os.path.join(data_dir, split, f"img_{i:03d}.png")

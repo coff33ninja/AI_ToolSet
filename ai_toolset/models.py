@@ -91,9 +91,17 @@ def summarize():
     """Print a status report of the toolkit's model requirements."""
     rows = [
         ("YOLO", "ultralytics (auto)", "uv run python -m ai_toolset get-models --yolo"),
-        ("Whisper STT", "faster-whisper (auto)", "uv run python -m ai_toolset get-models --whisper base"),
+        (
+            "Whisper STT",
+            "faster-whisper (auto)",
+            "uv run python -m ai_toolset get-models --whisper base",
+        ),
         ("TTS", "coqui (auto)", "uv run python -m ai_toolset get-models --tts"),
-        ("Diarization", "gated HF model (token)", "uv run python -m ai_toolset get-models --diarize"),
+        (
+            "Diarization",
+            "gated HF model (token)",
+            "uv run python -m ai_toolset get-models --diarize",
+        ),
         ("RVC", "user-trained .pth", "uv run python -m ai_toolset get-models --rvc <path>"),
     ]
     width = max(len(r[0]) for r in rows)
@@ -109,28 +117,54 @@ def main(argv=None):
         prog="python -m ai_toolset get-models",
         description="Pre-download model weights for the toolkit backends.",
     )
-    parser.add_argument("--yolo", nargs="?", const="yolov8n.pt", default=None,
-                        metavar="WEIGHTS", help="download YOLO weights (default yolov8n.pt)")
-    parser.add_argument("--whisper", nargs="?", const="base", default=None,
-                        metavar="SIZE", help="download a whisper model (default base)")
-    parser.add_argument("--engine", choices=["faster", "whisper"], default="faster",
-                        help="whisper engine (default faster)")
-    parser.add_argument("--tts", nargs="?", const="tts_models/en/ljspeech/tacotron2-DDC",
-                        default=None, metavar="MODEL",
-                        help="download a coqui TTS model")
-    parser.add_argument("--diarize", nargs="?", const=True, default=None,
-                        metavar="TOKEN", help="HF token for pyannote diarization")
-    parser.add_argument("--rvc", metavar="MODEL_PATH",
-                        help="validate a user-trained RVC .pth model path")
+    parser.add_argument(
+        "--yolo",
+        nargs="?",
+        const="yolov8n.pt",
+        default=None,
+        metavar="WEIGHTS",
+        help="download YOLO weights (default yolov8n.pt)",
+    )
+    parser.add_argument(
+        "--whisper",
+        nargs="?",
+        const="base",
+        default=None,
+        metavar="SIZE",
+        help="download a whisper model (default base)",
+    )
+    parser.add_argument(
+        "--engine",
+        choices=["faster", "whisper"],
+        default="faster",
+        help="whisper engine (default faster)",
+    )
+    parser.add_argument(
+        "--tts",
+        nargs="?",
+        const="tts_models/en/ljspeech/tacotron2-DDC",
+        default=None,
+        metavar="MODEL",
+        help="download a coqui TTS model",
+    )
+    parser.add_argument(
+        "--diarize",
+        nargs="?",
+        const=True,
+        default=None,
+        metavar="TOKEN",
+        help="HF token for pyannote diarization",
+    )
+    parser.add_argument(
+        "--rvc", metavar="MODEL_PATH", help="validate a user-trained RVC .pth model path"
+    )
     parser.add_argument("--status", action="store_true", help="print model status table")
     parser.add_argument("--gpus", help="comma-separated physical GPU indices")
     args = parser.parse_args(argv)
 
     gpus = [int(x) for x in args.gpus.split(",")] if args.gpus else None
 
-    if args.status or not any(
-        (args.yolo, args.whisper, args.tts, args.diarize, args.rvc)
-    ):
+    if args.status or not any((args.yolo, args.whisper, args.tts, args.diarize, args.rvc)):
         return summarize()
 
     try:

@@ -17,8 +17,9 @@ from ai_toolset import cuda
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--gpus", default=None,
-                        help="comma-separated physical GPU indices (e.g. 0,1) or 'all'")
+    parser.add_argument(
+        "--gpus", default=None, help="comma-separated physical GPU indices (e.g. 0,1) or 'all'"
+    )
     parser.add_argument("--framework", choices=["tf", "torch", "auto"], default="auto")
     args = parser.parse_args()
 

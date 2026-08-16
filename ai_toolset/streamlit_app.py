@@ -7,6 +7,7 @@ The heavy backends are loaded once and cached per session; the sidebar GPU
 picker flows into every model call. Falls back to CPU gracefully.
 """
 
+import contextlib
 import os
 import shutil
 import tempfile
@@ -17,8 +18,9 @@ from ai_toolset.env import load_env
 
 load_env()
 
-st.set_page_config(page_title="AI ToolSet Quick UI", page_icon=":material/auto_awesome:",
-                   layout="wide")
+st.set_page_config(
+    page_title="AI ToolSet Quick UI", page_icon=":material/auto_awesome:", layout="wide"
+)
 
 WHISPER_SIZES = ["tiny", "base", "small", "medium", "large-v3"]
 
@@ -48,8 +50,10 @@ def _gpu_list():
 
 gpus = _gpu_list()
 st.sidebar.divider()
-st.sidebar.caption("Select-GPUs = physical indices; CUDA_VISIBLE_DEVICES is set "
-                   "per call before any framework import.")
+st.sidebar.caption(
+    "Select-GPUs = physical indices; CUDA_VISIBLE_DEVICES is set "
+    "per call before any framework import."
+)
 
 
 def _gpu_key():
@@ -66,10 +70,8 @@ def _write_temp(uploaded, suffix):
 def _remove_paths(*paths):
     for p in paths:
         if p:
-            try:
+            with contextlib.suppress(OSError):
                 os.remove(p)
-            except OSError:
-                pass
 
 
 @st.cache_resource(show_spinner="loading whisper...")
@@ -103,19 +105,34 @@ def load_tts(model_name):
 
 
 tab_stt, tab_tts, tab_detect, tab_ocr, tab_bench, tab_mp, tab_audio, tab_models = st.tabs(
-    ["Speech-to-text", "Text-to-speech", "Detection", "OCR",
-     "Benchmark", "MediaPipe", "Audio capture", "Model downloads"])
+    [
+        "Speech-to-text",
+        "Text-to-speech",
+        "Detection",
+        "OCR",
+        "Benchmark",
+        "MediaPipe",
+        "Audio capture",
+        "Model downloads",
+    ]
+)
 
 
 with tab_stt:
     st.subheader("Transcribe audio")
-    engine = st.radio("Engine", ["faster", "whisper"], horizontal=True,
-                      help="faster-whisper (CTranslate2) or openai-whisper")
+    engine = st.radio(
+        "Engine",
+        ["faster", "whisper"],
+        horizontal=True,
+        help="faster-whisper (CTranslate2) or openai-whisper",
+    )
     model = st.selectbox("Model", WHISPER_SIZES, index=1)
-    language = st.text_input("Language (optional)", value="",
-                             help="e.g. 'en' or 'ja'; blank = auto-detect")
-    task = st.selectbox("Task", ["transcribe", "translate"],
-                        help="translate only applies to the whisper engine")
+    language = st.text_input(
+        "Language (optional)", value="", help="e.g. 'en' or 'ja'; blank = auto-detect"
+    )
+    task = st.selectbox(
+        "Task", ["transcribe", "translate"], help="translate only applies to the whisper engine"
+    )
     audio = st.file_uploader("Audio file", type=["wav", "mp3", "ogg", "m4a"])
     if audio is not None and st.button("Transcribe", type="primary"):
         with tempfile.NamedTemporaryFile(suffix=os.path.splitext(audio.name)[1]) as tmp:
@@ -124,36 +141,43 @@ with tab_stt:
             lang = language or None
             if engine == "faster":
                 loaded = load_whisper(model, "faster", _gpu_key())
-                segments, info = loaded.transcribe(tmp.name, language=lang,
-                                                   beam_size=5, vad_filter=True)
+                segments, info = loaded.transcribe(
+                    tmp.name, language=lang, beam_size=5, vad_filter=True
+                )
                 st.caption(f"language {info.language} (p={info.language_probability:.2f})")
                 st.code("\n".join(s.text.strip() for s in segments), language=None)
             else:
                 from ai_toolset.speech import transcribe_whisper
 
-                result = transcribe_whisper(tmp.name, model=model, language=lang,
-                                            task=task, gpus=gpus)
+                result = transcribe_whisper(
+                    tmp.name, model=model, language=lang, task=task, gpus=gpus
+                )
                 st.code(result["text"].strip(), language=None)
 
 with tab_tts:
     from ai_toolset.speech import synthesize_lines, synthesize_tts, tts_model_available
 
     st.subheader("Synthesize speech")
-    tts_name = st.selectbox("Model", list(TTS_MODELS),
-                            format_func=lambda m: f"{m}  -  {TTS_MODELS[m]}")
+    tts_name = st.selectbox(
+        "Model", list(TTS_MODELS), format_func=lambda m: f"{m}  -  {TTS_MODELS[m]}"
+    )
     language = st.text_input("Language (XTTS v2 only)", value="en")
     speaker = st.file_uploader("Reference wav (XTTS voice cloning)", type=["wav"])
     text = st.text_area("Text", height=80)
 
     if not tts_model_available(tts_name):
-        st.info(f"`{tts_name}` is not downloaded yet. Allocate it from the "
-                "**Model downloads** tab (TTS dropdown).")
+        st.info(
+            f"`{tts_name}` is not downloaded yet. Allocate it from the "
+            "**Model downloads** tab (TTS dropdown)."
+        )
     if text and st.button("Synthesize", type="primary"):
         if tts_name.endswith("xtts_v2") and speaker is None:
             st.error("XTTS v2 needs a reference wav (>= 6 s) for voice cloning.")
         elif not tts_model_available(tts_name):
-            st.info(f"`{tts_name}` is not downloaded yet. Allocate it from the "
-                    "**Model downloads** tab (TTS dropdown).")
+            st.info(
+                f"`{tts_name}` is not downloaded yet. Allocate it from the "
+                "**Model downloads** tab (TTS dropdown)."
+            )
         else:
             out_path = speaker_path = None
             try:
@@ -161,15 +185,20 @@ with tab_tts:
                 os.close(fd)
                 speaker_path = _write_temp(speaker, ".wav") if speaker is not None else None
                 with st.spinner("synthesizing..."):
-                    synthesize_tts(text, out_path, model_name=tts_name,
-                                   speaker_wav=speaker_path, language=language,
-                                   gpus=gpus)
+                    synthesize_tts(
+                        text,
+                        out_path,
+                        model_name=tts_name,
+                        speaker_wav=speaker_path,
+                        language=language,
+                        gpus=gpus,
+                    )
                 with open(out_path, "rb") as f:
                     data = f.read()
                 st.audio(data, format="audio/wav")
-                st.download_button("Download wav", data,
-                                   file_name=os.path.basename(out_path),
-                                   mime="audio/wav")
+                st.download_button(
+                    "Download wav", data, file_name=os.path.basename(out_path), mime="audio/wav"
+                )
             finally:
                 _remove_paths(out_path, speaker_path)
 
@@ -181,26 +210,34 @@ with tab_tts:
         if tts_name.endswith("xtts_v2") and speaker is None:
             st.error("XTTS v2 needs a reference wav (>= 6 s) for voice cloning.")
         elif not tts_model_available(tts_name):
-            st.info(f"`{tts_name}` is not downloaded yet. Allocate it from the "
-                    "**Model downloads** tab (TTS dropdown).")
+            st.info(
+                f"`{tts_name}` is not downloaded yet. Allocate it from the "
+                "**Model downloads** tab (TTS dropdown)."
+            )
         else:
             out_dir = tempfile.mkdtemp(prefix="tts_batch_")
             speaker_path = _write_temp(speaker, ".wav") if speaker is not None else None
             try:
                 with st.spinner("synthesizing..."):
-                    written = synthesize_lines(batch_text.splitlines(),
-                                               out_dir=out_dir,
-                                               model_name=tts_name,
-                                               speaker_wav=speaker_path,
-                                               language=language, gpus=gpus,
-                                               prefix=batch_prefix)
+                    written = synthesize_lines(
+                        batch_text.splitlines(),
+                        out_dir=out_dir,
+                        model_name=tts_name,
+                        speaker_wav=speaker_path,
+                        language=language,
+                        gpus=gpus,
+                        prefix=batch_prefix,
+                    )
                 for wav in written:
                     with open(wav, "rb") as f:
                         data = f.read()
-                    st.download_button(f"Download {os.path.basename(wav)}", data,
-                                       file_name=os.path.basename(wav),
-                                       mime="audio/wav",
-                                       key=f"batch_dl_{wav}")
+                    st.download_button(
+                        f"Download {os.path.basename(wav)}",
+                        data,
+                        file_name=os.path.basename(wav),
+                        mime="audio/wav",
+                        key=f"batch_dl_{wav}",
+                    )
                 st.caption(f"{len(written)} wav files synthesized")
             finally:
                 _remove_paths(speaker_path)
@@ -210,8 +247,7 @@ with tab_detect:
     st.subheader("YOLO detection")
     weights = st.text_input("Weights", value="yolov8n.pt")
     conf = st.slider("Confidence", 0.0, 1.0, 0.25)
-    img = st.file_uploader("Image", type=["jpg", "png", "jpeg", "bmp"],
-                           key="detect_image")
+    img = st.file_uploader("Image", type=["jpg", "png", "jpeg", "bmp"], key="detect_image")
     if img is not None and st.button("Detect", type="primary"):
         import cv2
 
@@ -221,23 +257,26 @@ with tab_detect:
         try:
             model = load_yolo(weights)
             frame = cv2.imread(tmp)
-            detections = detect_frame(frame, weights=weights, conf=conf,
-                                      model=model, gpus=gpus)
+            detections = detect_frame(frame, weights=weights, conf=conf, model=model, gpus=gpus)
             draw_detections(frame, detections)
-            st.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
-                     caption=f"{len(detections)} detections")
+            st.image(
+                cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), caption=f"{len(detections)} detections"
+            )
             ok, buf = cv2.imencode(".png", frame)
             if ok:
-                st.download_button("Download annotated image", buf.tobytes(),
-                                   file_name="annotated.png", mime="image/png")
+                st.download_button(
+                    "Download annotated image",
+                    buf.tobytes(),
+                    file_name="annotated.png",
+                    mime="image/png",
+                )
             st.dataframe(detections, use_container_width=True)
         finally:
             _remove_paths(tmp)
 
     st.divider()
     st.subheader("YOLO on a video (sampled frames)")
-    video = st.file_uploader("Video", type=["mp4", "avi", "mov", "mkv"],
-                             key="detect_video")
+    video = st.file_uploader("Video", type=["mp4", "avi", "mov", "mkv"], key="detect_video")
     sample_every = st.slider("Sample every N frames", 1, 60, 15)
     if video is not None and st.button("Detect video", type="secondary"):
         import cv2
@@ -258,8 +297,9 @@ with tab_detect:
                     break
                 frames_total += 1
                 if frames_total % sample_every == 0:
-                    detections = detect_frame(frame, weights=weights, conf=conf,
-                                              model=model, gpus=gpus)
+                    detections = detect_frame(
+                        frame, weights=weights, conf=conf, model=model, gpus=gpus
+                    )
                     draw_detections(frame, detections)
                     det_total += len(detections)
                     samples.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -280,8 +320,7 @@ with tab_ocr:
     st.subheader("OCR (Windows.Media.Ocr)")
     ocr_lang = st.text_input("Language", value="en")
     source = st.radio("Source", ["Upload image", "Screen"], horizontal=True)
-    img = st.file_uploader("Image", type=["jpg", "png", "jpeg", "bmp"],
-                           key="ocr_image")
+    img = st.file_uploader("Image", type=["jpg", "png", "jpeg", "bmp"], key="ocr_image")
     if st.button("Read text", type="primary"):
         from ai_toolset.ocr import ocr_image, ocr_screen
 
@@ -303,10 +342,12 @@ with tab_ocr:
 
 with tab_bench:
     st.subheader("Latency benchmarks")
-    bench_audio = st.file_uploader("Audio for STT", type=["wav", "mp3", "ogg", "m4a"],
-                                   key="bench_audio")
-    bench_image = st.file_uploader("Image for YOLO", type=["jpg", "png", "jpeg", "bmp"],
-                                   key="bench_image")
+    bench_audio = st.file_uploader(
+        "Audio for STT", type=["wav", "mp3", "ogg", "m4a"], key="bench_audio"
+    )
+    bench_image = st.file_uploader(
+        "Image for YOLO", type=["jpg", "png", "jpeg", "bmp"], key="bench_image"
+    )
     stt_model = st.selectbox("STT model", WHISPER_SIZES, index=1, key="bench_stt_model")
     yolo_weights = st.text_input("YOLO weights", value="yolov8n.pt", key="bench_yolo")
     engines = st.multiselect("STT engines", ["faster", "whisper"], default=["faster"])
@@ -321,13 +362,17 @@ with tab_bench:
                 a = _write_temp(bench_audio, os.path.splitext(bench_audio.name)[1])
                 tmp_paths.append(a)
                 for engine in engines:
-                    rows.extend(benchmark_stt(a, engine=engine, model=stt_model,
-                                             iterations=iterations, gpus=gpus))
+                    rows.extend(
+                        benchmark_stt(
+                            a, engine=engine, model=stt_model, iterations=iterations, gpus=gpus
+                        )
+                    )
             if bench_image is not None:
                 im = _write_temp(bench_image, os.path.splitext(bench_image.name)[1])
                 tmp_paths.append(im)
-                rows.extend(benchmark_yolo(im, weights=yolo_weights,
-                                           iterations=iterations, gpus=gpus))
+                rows.extend(
+                    benchmark_yolo(im, weights=yolo_weights, iterations=iterations, gpus=gpus)
+                )
         finally:
             _remove_paths(*tmp_paths)
         if rows:
@@ -340,16 +385,16 @@ with tab_mp:
     from ai_toolset.mp import available
 
     if not available():
-        st.info("The mediapipe extra is not installed. Install it with: "
-                "`uv sync --extra mediapipe`")
+        st.info(
+            "The mediapipe extra is not installed. Install it with: `uv sync --extra mediapipe`"
+        )
     else:
         import cv2
         import numpy as np
 
         from ai_toolset.mp import annotate, process_frame
 
-        solution = st.selectbox("Solution", ["pose", "hands", "face", "holistic",
-                                             "selfie"])
+        solution = st.selectbox("Solution", ["pose", "hands", "face", "holistic", "selfie"])
         camera = st.camera_input("Webcam", key="mp_camera")
         if camera is not None:
             arr = np.frombuffer(camera.getvalue(), np.uint8)
@@ -367,23 +412,26 @@ with tab_audio:
         inputs = [d for d in devices if d.max_input_channels > 0]
     except Exception:  # noqa: BLE001
         inputs = []
-    device_opts = {f"[{i}] {d.name}": i for i, d in enumerate(inputs)} if inputs else {"default": None}
-    device_pick = st.selectbox("Input device", list(device_opts),
-                               key="record_device")
+    device_opts = (
+        {f"[{i}] {d.name}": i for i, d in enumerate(inputs)} if inputs else {"default": None}
+    )
+    device_pick = st.selectbox("Input device", list(device_opts), key="record_device")
     rec_duration = st.slider("Duration (seconds)", 1, 60, 10)
     if st.button("Record", type="primary"):
         fd, path = tempfile.mkstemp(suffix=".wav")
         os.close(fd)
         try:
             with st.spinner("recording..."):
-                path, seconds = record_mic(path, rec_duration, sr=16000,
-                                           device=device_opts[device_pick])
+                path, seconds = record_mic(
+                    path, rec_duration, sr=16000, device=device_opts[device_pick]
+                )
             with open(path, "rb") as f:
                 data = f.read()
             st.audio(data, format="audio/wav")
             st.caption(f"{seconds:.1f}s recorded")
-            st.download_button("Download wav", data,
-                               file_name=os.path.basename(path), mime="audio/wav")
+            st.download_button(
+                "Download wav", data, file_name=os.path.basename(path), mime="audio/wav"
+            )
         finally:
             _remove_paths(path)
 
@@ -398,9 +446,14 @@ with tab_audio:
         out_dir = tempfile.mkdtemp(prefix="live_seg_")
         try:
             with st.spinner(f"recording and transcribing {lt_duration}s..."):
-                results = transcribe_live(duration=lt_duration, chunk=lt_chunk,
-                                          model=lt_model, language=None, gpus=gpus,
-                                          out_dir=out_dir)
+                results = transcribe_live(
+                    duration=lt_duration,
+                    chunk=lt_chunk,
+                    model=lt_model,
+                    language=None,
+                    gpus=gpus,
+                    out_dir=out_dir,
+                )
             st.caption(f"{len(results)} segments")
             for wav, txt in results:
                 st.write(f"**{os.path.basename(wav)}**  {txt or '(silence)'}")
@@ -409,38 +462,45 @@ with tab_audio:
 
 with tab_models:
     st.subheader("Pre-download models")
-    st.caption("Pick a variant for each model, then download it. The TTS/detect/STT "
-               "tabs use whatever has been allocated here.")
+    st.caption(
+        "Pick a variant for each model, then download it. The TTS/detect/STT "
+        "tabs use whatever has been allocated here."
+    )
     from ai_toolset import models
 
-    yolo_pick = st.selectbox("YOLO weights", models.YOLO_WEIGHTS
-                             if hasattr(models, "YOLO_WEIGHTS")
-                             else ["yolov8n.pt", "yolov8s.pt", "yolov8m.pt",
-                                   "yolov8l.pt", "yolov8x.pt"])
+    yolo_pick = st.selectbox(
+        "YOLO weights",
+        models.YOLO_WEIGHTS
+        if hasattr(models, "YOLO_WEIGHTS")
+        else ["yolov8n.pt", "yolov8s.pt", "yolov8m.pt", "yolov8l.pt", "yolov8x.pt"],
+    )
     if st.button("Download YOLO weights", use_container_width=True):
         with st.spinner("downloading..."):
             models.ensure_yolo(yolo_pick)
         st.success("done")
 
-    whisper_size = st.selectbox("Whisper size", WHISPER_SIZES, index=1,
-                                key="models_whisper_size")
-    whisper_engine = st.selectbox("Whisper engine", ["faster", "whisper"],
-                                  key="models_whisper_engine")
+    whisper_size = st.selectbox("Whisper size", WHISPER_SIZES, index=1, key="models_whisper_size")
+    whisper_engine = st.selectbox(
+        "Whisper engine", ["faster", "whisper"], key="models_whisper_engine"
+    )
     if st.button("Download Whisper model", use_container_width=True):
         with st.spinner("downloading..."):
             models.ensure_whisper(whisper_size, engine=whisper_engine)
         st.success("done")
 
-    tts_pick = st.selectbox("TTS model", list(TTS_MODELS),
-                            format_func=lambda m: f"{m}  -  {TTS_MODELS[m]}")
+    tts_pick = st.selectbox(
+        "TTS model", list(TTS_MODELS), format_func=lambda m: f"{m}  -  {TTS_MODELS[m]}"
+    )
     if st.button("Download TTS model", use_container_width=True):
         with st.spinner("downloading (XTTS v2 is large)..."):
             models.ensure_tts(tts_pick)
         st.success("done")
 
     st.divider()
-    st.caption("Diarization needs a HF token (gated pyannote/speaker-diarization-3.1 "
-               "model). RVC needs a user-trained model path.")
+    st.caption(
+        "Diarization needs a HF token (gated pyannote/speaker-diarization-3.1 "
+        "model). RVC needs a user-trained model path."
+    )
 
     def _pyannote_available():
         try:
@@ -460,8 +520,10 @@ with tab_models:
             except RuntimeError as exc:
                 st.error(str(exc))
     else:
-        st.info("The diarize extra is not installed (pyannote conflicts with "
-                "the rvc extra). Install it with: `uv sync --extra diarize`")
+        st.info(
+            "The diarize extra is not installed (pyannote conflicts with "
+            "the rvc extra). Install it with: `uv sync --extra diarize`"
+        )
 
     rvc_path = st.text_input("RVC model path (.pth)", value="")
     if rvc_path and st.button("Register RVC model", use_container_width=True):

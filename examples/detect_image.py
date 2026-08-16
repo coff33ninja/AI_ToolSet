@@ -19,8 +19,7 @@ def main():
     args = parser.parse_args()
 
     gpus = [int(x) for x in args.gpus.split(",")] if args.gpus else None
-    out = detect.annotate(args.image, args.out, weights=args.weights,
-                          conf=args.conf, gpus=gpus)
+    out = detect.annotate(args.image, args.out, weights=args.weights, conf=args.conf, gpus=gpus)
     print(f"annotated -> {out}")
 
 

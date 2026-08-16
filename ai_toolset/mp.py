@@ -58,8 +58,11 @@ def _process_spec(solution, static, min_conf):
         )
     if solution == "face":
         return (
-            {"static_image_mode": static, "min_detection_confidence": min_conf,
-             "min_tracking_confidence": min_conf},
+            {
+                "static_image_mode": static,
+                "min_detection_confidence": min_conf,
+                "min_tracking_confidence": min_conf,
+            },
             "face_landmarks",
             mp.face_mesh.FACEMESH_TESSELATION,
             False,
@@ -127,19 +130,17 @@ def _draw_holistic(frame, results):
     hand_spec = style(color=_LANDMARK_COLORS["hands"], thickness=2, circle_radius=2)
     face_spec = style(color=_LANDMARK_COLORS["face"], thickness=1, circle_radius=1)
     if results.pose_landmarks:
-        drawing.draw_landmarks(frame, results.pose_landmarks,
-                               mp.pose.POSE_CONNECTIONS,
-                               pose_spec, pose_spec)
+        drawing.draw_landmarks(
+            frame, results.pose_landmarks, mp.pose.POSE_CONNECTIONS, pose_spec, pose_spec
+        )
     if results.face_landmarks:
-        drawing.draw_landmarks(frame, results.face_landmarks,
-                               mp.face_mesh.FACEMESH_CONTOURS,
-                               face_spec, face_spec)
+        drawing.draw_landmarks(
+            frame, results.face_landmarks, mp.face_mesh.FACEMESH_CONTOURS, face_spec, face_spec
+        )
     for lm in results.left_hand_landmarks or []:
-        drawing.draw_landmarks(frame, lm, mp.hands.HAND_CONNECTIONS,
-                               hand_spec, hand_spec)
+        drawing.draw_landmarks(frame, lm, mp.hands.HAND_CONNECTIONS, hand_spec, hand_spec)
     for lm in results.right_hand_landmarks or []:
-        drawing.draw_landmarks(frame, lm, mp.hands.HAND_CONNECTIONS,
-                               hand_spec, hand_spec)
+        drawing.draw_landmarks(frame, lm, mp.hands.HAND_CONNECTIONS, hand_spec, hand_spec)
 
 
 def annotate(frame, solution, results, mask_threshold=0.5, mask_color=(80, 160, 255)):
@@ -162,23 +163,19 @@ def annotate(frame, solution, results, mask_threshold=0.5, mask_color=(80, 160, 
     attr, connections, _ = _process_spec(solution, False, 0.5)[1:]
     landmarks = getattr(results, attr, None)
     if landmarks is not None:
-        _draw_landmarks(frame, landmarks, connections,
-                        _LANDMARK_COLORS.get(solution, (0, 255, 0)))
+        _draw_landmarks(frame, landmarks, connections, _LANDMARK_COLORS.get(solution, (0, 255, 0)))
     return frame
 
 
-def overlay(frame, solution="pose", static=False, min_conf=0.5,
-            mask_threshold=0.5, mirror=True):
+def overlay(frame, solution="pose", static=False, min_conf=0.5, mask_threshold=0.5, mirror=True):
     """Run a solution on a frame and return the annotated BGR frame."""
     if mirror:
         frame = cv2.flip(frame, 1)
-    results = process_frame(frame, solution=solution, static=static,
-                            min_conf=min_conf)
+    results = process_frame(frame, solution=solution, static=static, min_conf=min_conf)
     return annotate(frame, solution, results, mask_threshold=mask_threshold)
 
 
-def webcam_stream(camera=0, solution="pose", mirror=True, min_conf=0.5,
-                  mask_threshold=0.5):
+def webcam_stream(camera=0, solution="pose", mirror=True, min_conf=0.5, mask_threshold=0.5):
     """Yield annotated BGR frames from a webcam. Consume with cv2.imshow."""
     if not available():
         raise RuntimeError("mediapipe not installed: uv sync --extra mediapipe")
@@ -190,7 +187,12 @@ def webcam_stream(camera=0, solution="pose", mirror=True, min_conf=0.5,
             ok, frame = cap.read()
             if not ok:
                 break
-            yield overlay(frame, solution=solution, mirror=mirror,
-                          min_conf=min_conf, mask_threshold=mask_threshold)
+            yield overlay(
+                frame,
+                solution=solution,
+                mirror=mirror,
+                min_conf=min_conf,
+                mask_threshold=mask_threshold,
+            )
     finally:
         cap.release()

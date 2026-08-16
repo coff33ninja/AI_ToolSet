@@ -32,11 +32,13 @@ def ocr_frame(frame, language="en"):
         line_text = line.get("text", "").strip() if isinstance(line, dict) else str(line).strip()
         if not line_text:
             continue
-        lines.append({
-            "text": line_text,
-            "line_index": i,
-            "word_count": len(line.get("words", [])) if isinstance(line, dict) else 0,
-        })
+        lines.append(
+            {
+                "text": line_text,
+                "line_index": i,
+                "word_count": len(line.get("words", [])) if isinstance(line, dict) else 0,
+            }
+        )
     text = (result.get("text") or "").strip()
     return text, lines
 

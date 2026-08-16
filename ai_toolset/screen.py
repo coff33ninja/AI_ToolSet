@@ -29,7 +29,9 @@ def capture_square(region=FULL_SCREEN, color=(0, 0, 0)):
     return pad_to_square(frame, color=color)
 
 
-def select_region(capture_region=FULL_SCREEN, window_name="Select region - drag, Enter=ok, Esc=cancel"):
+def select_region(
+    capture_region=FULL_SCREEN, window_name="Select region - drag, Enter=ok, Esc=cancel"
+):
     """Interactively select a screen region with the mouse.
 
     Returns a region dict (top/left/width/height) or None on cancel.
@@ -58,8 +60,14 @@ def select_region(capture_region=FULL_SCREEN, window_name="Select region - drag,
         cv2.imshow(window_name, overlay)
         key = cv2.waitKey(1) & 0xFF
         if key in (13, 32) and state["start"] and state["end"]:
-            x1, y1 = min(state["start"][0], state["end"][0]), min(state["start"][1], state["end"][1])
-            x2, y2 = max(state["start"][0], state["end"][0]), max(state["start"][1], state["end"][1])
+            x1, y1 = (
+                min(state["start"][0], state["end"][0]),
+                min(state["start"][1], state["end"][1]),
+            )
+            x2, y2 = (
+                max(state["start"][0], state["end"][0]),
+                max(state["start"][1], state["end"][1]),
+            )
             result = {"top": y1, "left": x1, "width": x2 - x1, "height": y2 - y1}
             break
         if key == 27:

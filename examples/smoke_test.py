@@ -12,6 +12,7 @@ import json
 import os
 import sys
 import tempfile
+import wave
 
 import cv2
 import numpy as np
@@ -21,6 +22,7 @@ def step(name):
     def deco(fn):
         steps.append((name, fn))
         return fn
+
     return deco
 
 
@@ -78,6 +80,39 @@ def _imports_stt():
     import faster_whisper  # noqa: F401
 
 
+@step("faster-whisper load_faster_model (device/compute-type auto)")
+def _load_faster():
+    from ai_toolset.cuda import detect_gpus
+    from ai_toolset.speech import load_faster_model
+
+    gpus = [g["index"] for g in detect_gpus()]
+    model = load_faster_model("tiny", gpus=gpus or None)
+    device = model.model.device
+    assert device == ("cuda" if gpus else "cpu"), (
+        f"expected {'cuda' if gpus else 'cpu'}, got {device}"
+    )
+    print(f"        {device}/{model.model.compute_type}")
+
+
+@step("faster-whisper transcribe_faster on synthetic tone")
+def _transcribe_faster():
+    from ai_toolset.speech import transcribe_faster
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "tone.wav")
+        sr = 16000
+        t = np.linspace(0, 0.5, int(sr * 0.5))
+        data = (0.3 * np.sin(2 * np.pi * 440 * t)).astype("float32")
+        with wave.open(path, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(sr)
+            w.writeframes((data * 32767).astype("<i2").tobytes())
+        segments, info = transcribe_faster(path, model="tiny", gpus=None)
+        assert info.language, "no language detected"
+        print(f"        {info.language} {len(segments)} segment(s)")
+
+
 @step("imports: tts (coqui TTS)")
 def _imports_tts():
     from ai_toolset.speech import _coqui_numpy_compat
@@ -123,8 +158,7 @@ def _augment():
         src = os.path.join(tmp, "src")
         dst = os.path.join(tmp, "dst")
         os.makedirs(src)
-        cv2.imwrite(os.path.join(src, "a.jpg"),
-                    np.zeros((64, 64, 3), dtype=np.uint8))
+        cv2.imwrite(os.path.join(src, "a.jpg"), np.zeros((64, 64, 3), dtype=np.uint8))
         count = augment_dir(src, dst, ops=["hflip", "vflip", "rot90", "bright"])
         assert count > 0
 
@@ -150,8 +184,15 @@ def _ocr():
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "text.png")
         img = np.zeros((160, 640, 3), dtype=np.uint8)
-        cv2.putText(img, "Hello AI Toolset 2026", (20, 80),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 3)
+        cv2.putText(
+            img,
+            "Hello AI Toolset 2026",
+            (20, 80),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1.2,
+            (255, 255, 255),
+            3,
+        )
         cv2.imwrite(path, img)
         text, _ = ocr_image(path)
         assert "Hello" in text or "AI Toolset" in text, f"got: {text!r}"
@@ -182,8 +223,7 @@ def _webapp():
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
-    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port,
-                                           log_level="error"))
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
     try:
@@ -215,8 +255,11 @@ def _tts_batch():
             f.write("First line of the fine tune set.\n")
         with open(txt, encoding="utf-8") as f:
             lines = f.read().splitlines()
-        written = synthesize_lines(lines, out_dir=os.path.join(tmp, "out"),
-                                   model_name="tts_models/en/ljspeech/tacotron2-DDC")
+        written = synthesize_lines(
+            lines,
+            out_dir=os.path.join(tmp, "out"),
+            model_name="tts_models/en/ljspeech/tacotron2-DDC",
+        )
         assert written and os.path.isfile(written[0])
         print(f"        {len(written)} wav written")
 

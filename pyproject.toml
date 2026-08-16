@@ -122,7 +122,7 @@ ui = [
 ]
 
 [dependency-groups]
-dev = ["ruff"]
+dev = ["ruff", "pytest"]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -131,6 +131,27 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["ai_toolset*"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+# Vendored fairseq is third-party code (and would throw thousands of lint
+# errors); examples/scratch_*.py are throwaway demos.
+extend-exclude = ["vendor", "examples/scratch_*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+ignore = ["B008"]  # function call in default argument (FastAPI Depends)
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# hydra (pulled in by the rvc extra's fairseq) ships a pytest11 plugin that
+# needs antlr4; disable it so the full local env can run the suite too.
+addopts = "-p no:hydra_pytest -m 'not slow'"
+markers = [
+    "gpu: requires a CUDA GPU",
+    "slow: downloads model weights or takes minutes",
+]
 
 [tool.uv]
   # Cache project-locally on the workspace drive (E:) instead of the default

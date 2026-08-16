@@ -21,8 +21,7 @@ def _timed(fn, iterations):
     return timings
 
 
-def benchmark_stt(audio_path, engine="faster", model="base", iterations=3,
-                  gpus=None):
+def benchmark_stt(audio_path, engine="faster", model="base", iterations=3, gpus=None):
     """Benchmark one STT engine on each selected GPU. Returns list of rows.
 
     Rows: {gpus, engine, model, mean_s, min_s}. warmup run excluded from stats.
@@ -31,21 +30,28 @@ def benchmark_stt(audio_path, engine="faster", model="base", iterations=3,
 
     rows = []
     for gpu in gpus or [None]:
+
         def run_once(engine=engine, gpu=gpu):
             if engine == "whisper":
-                speech.transcribe_whisper(audio_path, model=model, gpus=[gpu] if gpu is not None else None)
+                speech.transcribe_whisper(
+                    audio_path, model=model, gpus=[gpu] if gpu is not None else None
+                )
             else:
-                speech.transcribe_faster(audio_path, model=model, gpus=[gpu] if gpu is not None else None)
+                speech.transcribe_faster(
+                    audio_path, model=model, gpus=[gpu] if gpu is not None else None
+                )
 
         run_once()  # warmup (model load dominates)
         timings = _timed(run_once, iterations)
-        rows.append({
-            "gpus": str(gpu),
-            "engine": engine,
-            "model": model,
-            "mean_s": sum(timings) / len(timings),
-            "min_s": min(timings),
-        })
+        rows.append(
+            {
+                "gpus": str(gpu),
+                "engine": engine,
+                "model": model,
+                "mean_s": sum(timings) / len(timings),
+                "min_s": min(timings),
+            }
+        )
     return rows
 
 
@@ -58,18 +64,22 @@ def benchmark_yolo(image_path, weights="yolov8n.pt", iterations=10, gpus=None):
 
     rows = []
     for gpu in gpus or [None]:
+
         def run_once(gpu=gpu):
-            detect.detect_image(image_path, weights=weights,
-                                gpus=[gpu] if gpu is not None else None)
+            detect.detect_image(
+                image_path, weights=weights, gpus=[gpu] if gpu is not None else None
+            )
 
         run_once()  # warmup (weights download + model load)
         timings = _timed(run_once, iterations)
-        rows.append({
-            "gpus": str(gpu),
-            "model": weights,
-            "mean_ms": sum(timings) / len(timings) * 1000,
-            "min_ms": min(timings) * 1000,
-        })
+        rows.append(
+            {
+                "gpus": str(gpu),
+                "model": weights,
+                "mean_ms": sum(timings) / len(timings) * 1000,
+                "min_ms": min(timings) * 1000,
+            }
+        )
     return rows
 
 
@@ -77,8 +87,12 @@ def print_table(rows):
     if not rows:
         return
     keys = list(rows[0].keys())
-    widths = {k: max(len(k), *(len(f"{r[k]:.3f}" if isinstance(r[k], float) else str(r[k]))
-                              for r in rows)) for k in keys}
+    widths = {
+        k: max(
+            len(k), *(len(f"{r[k]:.3f}" if isinstance(r[k], float) else str(r[k])) for r in rows)
+        )
+        for k in keys
+    }
     print("  ".join(k.ljust(widths[k]) for k in keys))
     for r in rows:
         cells = []

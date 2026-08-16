@@ -28,8 +28,16 @@ def _apply_gpus(gpus):
         set_visible_gpus(gpus)
 
 
-def transcribe_whisper(audio_path, model="base", language=None, device=None,
-                       task="transcribe", fp16=True, verbose=False, gpus=None):
+def transcribe_whisper(
+    audio_path,
+    model="base",
+    language=None,
+    device=None,
+    task="transcribe",
+    fp16=True,
+    verbose=False,
+    gpus=None,
+):
     """Transcribe audio with OpenAI Whisper (PyTorch backend).
 
     Returns the whisper result dict; the transcript is result["text"]. With
@@ -43,45 +51,60 @@ def transcribe_whisper(audio_path, model="base", language=None, device=None,
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     loaded = whisper.load_model(model, device=device)
     return loaded.transcribe(
-        audio_path, language=language, task=task,
-        fp16=(bool(fp16) and device == "cuda"), verbose=verbose,
+        audio_path,
+        language=language,
+        task=task,
+        fp16=(bool(fp16) and device == "cuda"),
+        verbose=verbose,
     )
 
 
-def load_faster_model(model="base", device="auto", compute_type="auto",
-                      gpus=None):
+def load_faster_model(model="base", device="auto", compute_type="auto", gpus=None):
     """Build a faster-whisper WhisperModel with GPU + compute-type detection.
 
     device "auto" selects cuda when CTranslate2 sees a usable GPU, else cpu.
-    compute_type "auto" = float16 on cuda, int8 on cpu. Returns the loaded
-    WhisperModel. Reused by transcribe_faster, transcribe_live, and the
-    Streamlit STT tab (which caches it) so every path shares the same
-    Pascal-aware detection.
+    compute_type "auto" picks the fastest type the device supports: float16
+    (Ampere+), int8_float16 (Turing), int8_float32 (Pascal), else float32 on
+    cuda / int8 on cpu. Returns the loaded WhisperModel. Reused by
+    transcribe_faster, transcribe_live, and the Streamlit STT tab (which
+    caches it) so every path shares the same detection.
     """
     _apply_gpus(gpus)
     from faster_whisper import WhisperModel
 
     if device == "auto":
         import ctranslate2
+
         device = "cuda" if ctranslate2.get_cuda_device_count() > 0 else "cpu"
     if compute_type == "auto":
         import ctranslate2
+
         supported = set(ctranslate2.get_supported_compute_types(device))
         if "float16" in supported:
             compute_type = "float16"
         elif "int8_float16" in supported:
             compute_type = "int8_float16"
-        elif device == "cuda":
+        elif "int8_float32" in supported:
             # Pascal (GTX 10-series) has no efficient fp16 in CTranslate2.
+            compute_type = "int8_float32"
+        elif device == "cuda":
             compute_type = "float32"
         else:
             compute_type = "int8"
     return WhisperModel(model, device=device, compute_type=compute_type)
 
 
-def transcribe_faster(audio_path, model="base", language=None, device="auto",
-                      compute_type="auto", beam_size=5, vad_filter=True,
-                      condition_on_previous_text=True, gpus=None):
+def transcribe_faster(
+    audio_path,
+    model="base",
+    language=None,
+    device="auto",
+    compute_type="auto",
+    beam_size=5,
+    vad_filter=True,
+    condition_on_previous_text=True,
+    gpus=None,
+):
     """Transcribe audio with faster-whisper (CTranslate2 backend).
 
     device "auto" selects cuda when CTranslate2 sees a usable GPU, else cpu.
@@ -89,10 +112,11 @@ def transcribe_faster(audio_path, model="base", language=None, device="auto",
     (segments, info); segments is a fully materialized list so transcription
     runs before returning.
     """
-    loaded = load_faster_model(model, device=device, compute_type=compute_type,
-                               gpus=gpus)
+    loaded = load_faster_model(model, device=device, compute_type=compute_type, gpus=gpus)
     segments, info = loaded.transcribe(
-        audio_path, language=language, beam_size=beam_size,
+        audio_path,
+        language=language,
+        beam_size=beam_size,
         vad_filter=vad_filter,
         condition_on_previous_text=condition_on_previous_text,
     )
@@ -104,8 +128,15 @@ def segment_lines(segments):
     return [f"{s.start:.2f}s -> {s.end:.2f}s  {s.text.strip()}" for s in segments]
 
 
-def synthesize_tts(text, out_path, model_name="tts_models/multilingual/multi-dataset/xtts_v2",
-                   speaker_wav=None, language="en", device=None, gpus=None):
+def synthesize_tts(
+    text,
+    out_path,
+    model_name="tts_models/multilingual/multi-dataset/xtts_v2",
+    speaker_wav=None,
+    language="en",
+    device=None,
+    gpus=None,
+):
     """Synthesize speech with Coqui TTS.
 
     XTTS v2 (the default) is a voice-cloning model and REQUIRES speaker_wav (a
@@ -169,7 +200,8 @@ def _tts_cache_dir(model_name):
     <LocalAppData>/tts, else ~/.local/share/tts, plus the model dir name with
     '/' flattened to '--' (e.g. .../tts/tts_models--multilingual--multi-dataset--xtts_v2)."""
     base = os.environ.get("LOCALAPPDATA") or os.path.join(
-        os.path.expanduser("~"), ".local", "share")
+        os.path.expanduser("~"), ".local", "share"
+    )
     return os.path.join(base, "tts", model_name.replace("/", "--"))
 
 
@@ -189,8 +221,7 @@ def _has_tts_checkpoint(model_dir):
     return "config.json" in names
 
 
-def ensure_tts_model(model_name="tts_models/multilingual/multi-dataset/xtts_v2",
-                     gpus=None):
+def ensure_tts_model(model_name="tts_models/multilingual/multi-dataset/xtts_v2", gpus=None):
     """Return the cached coqui model dir, downloading it when the checkpoint
     is missing.
 
@@ -217,7 +248,8 @@ def ensure_tts_model(model_name="tts_models/multilingual/multi-dataset/xtts_v2",
     if not _has_tts_checkpoint(model_dir):
         raise RuntimeError(
             f"TTS model {model_name} failed to download fully into "
-            f"{model_dir}; check your network and retry.")
+            f"{model_dir}; check your network and retry."
+        )
     return model_dir
 
 
@@ -240,8 +272,9 @@ def _coqui_numpy_compat():
         )
 
 
-def transcribe_live(duration=60, chunk=5, model="base", language=None,
-                    gpus=None, out_dir="live_segments"):
+def transcribe_live(
+    duration=60, chunk=5, model="base", language=None, gpus=None, out_dir="live_segments"
+):
     """Stream-transcribe the microphone with faster-whisper.
 
     Records `chunk`-second windows and transcribes each one as it lands,
@@ -287,10 +320,16 @@ def transcribe_live(duration=60, chunk=5, model="base", language=None,
     return results
 
 
-def synthesize_lines(lines, out_dir="tts_output", model_name=
-                     "tts_models/multilingual/multi-dataset/xtts_v2",
-                     speaker_wav=None, language="en", gpus=None, prefix="line",
-                     metadata_csv=None):
+def synthesize_lines(
+    lines,
+    out_dir="tts_output",
+    model_name="tts_models/multilingual/multi-dataset/xtts_v2",
+    speaker_wav=None,
+    language="en",
+    gpus=None,
+    prefix="line",
+    metadata_csv=None,
+):
     """Synthesize one wav per text line (TTS batch / dataset builder).
 
     Skips empty lines. Writes <prefix>_<i:04d>.wav per line. When metadata_csv
@@ -307,14 +346,21 @@ def synthesize_lines(lines, out_dir="tts_output", model_name=
         if not text:
             continue
         out_path = os.path.join(out_dir, f"{prefix}_{i:04d}.wav")
-        synthesize_tts(text, out_path, model_name=model_name,
-                       speaker_wav=speaker_wav, language=language, gpus=gpus)
+        synthesize_tts(
+            text,
+            out_path,
+            model_name=model_name,
+            speaker_wav=speaker_wav,
+            language=language,
+            gpus=gpus,
+        )
         written.append(out_path)
         if metadata_csv:
             meta.append(f"{os.path.basename(out_path)}|{text}")
     if metadata_csv:
-        meta_path = metadata_csv if os.path.isabs(metadata_csv) else \
-            os.path.join(out_dir, metadata_csv)
+        meta_path = (
+            metadata_csv if os.path.isabs(metadata_csv) else os.path.join(out_dir, metadata_csv)
+        )
         os.makedirs(os.path.dirname(meta_path) or ".", exist_ok=True)
         with open(meta_path, "w", encoding="utf-8") as f:
             f.write("\n".join(meta) + "\n")
@@ -338,8 +384,14 @@ def _play_float32(data, sr):
     sd.wait()
 
 
-def narrate(lines, model_name="tts_models/multilingual/multi-dataset/xtts_v2",
-            speaker_wav=None, language="en", gpus=None, out_dir=None):
+def narrate(
+    lines,
+    model_name="tts_models/multilingual/multi-dataset/xtts_v2",
+    speaker_wav=None,
+    language="en",
+    gpus=None,
+    out_dir=None,
+):
     """Synthesize each line and play it out loud in sequence.
 
     out_dir optionally keeps the generated wavs (default: skip saving).
@@ -359,8 +411,9 @@ def narrate(lines, model_name="tts_models/multilingual/multi-dataset/xtts_v2",
         else:
             fd, wav = tempfile.mkstemp(suffix=".wav")
             os.close(fd)
-        synthesize_tts(text, wav, model_name=model_name,
-                       speaker_wav=speaker_wav, language=language, gpus=gpus)
+        synthesize_tts(
+            text, wav, model_name=model_name, speaker_wav=speaker_wav, language=language, gpus=gpus
+        )
         play_audio(wav)
         paths.append(wav)
     return paths

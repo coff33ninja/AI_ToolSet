@@ -9,6 +9,7 @@ splitting on silence, and producing the <speaker>_<index>.wav naming
 convention the RVC webui expects.
 """
 
+import contextlib
 import glob
 import os
 import threading
@@ -35,8 +36,7 @@ def probe_dir(src_dir, exts=AUDIO_EXTS):
         except Exception as exc:  # noqa: BLE001 - skip unreadable files
             print(f"  skip {path}: {exc}")
             continue
-        out.append({"path": path, "name": os.path.basename(path),
-                    "duration_sec": info.duration})
+        out.append({"path": path, "name": os.path.basename(path), "duration_sec": info.duration})
     return out
 
 
@@ -50,8 +50,7 @@ def resample_dir(src_dir, out_dir, sr=48000, mono=True, exts=AUDIO_EXTS):
     written = 0
     for entry in probe_dir(src_dir, exts=exts):
         y, _ = librosa.load(entry["path"], sr=sr, mono=mono)
-        out_path = os.path.join(out_dir,
-                                os.path.splitext(entry["name"])[0] + ".wav")
+        out_path = os.path.join(out_dir, os.path.splitext(entry["name"])[0] + ".wav")
         sf.write(out_path, y, sr, subtype="PCM_16")
         written += 1
     return written
@@ -72,8 +71,7 @@ def _split_intervals(y, sr, max_sec=60, min_silence=0.5, top_db=40):
     min_len = int(0.3 * sr)
     min_gap = int(min_silence * sr)
     intervals = []
-    for start, end in librosa.effects.split(y, top_db=top_db,
-                                           frame_length=2048, hop_length=512):
+    for start, end in librosa.effects.split(y, top_db=top_db, frame_length=2048, hop_length=512):
         start = int(start)
         end = int(end)
         if end - start < min_len:
@@ -92,8 +90,9 @@ def _split_intervals(y, sr, max_sec=60, min_silence=0.5, top_db=40):
     return chunks
 
 
-def split_on_silence(path, out_dir, sr=48000, max_sec=60, min_silence=0.5,
-                     top_db=40, base_name=None):
+def split_on_silence(
+    path, out_dir, sr=48000, max_sec=60, min_silence=0.5, top_db=40, base_name=None
+):
     """Split one audio file on silence into clean speech segments (WAV).
 
     Returns the list of written file paths.
@@ -102,16 +101,16 @@ def split_on_silence(path, out_dir, sr=48000, max_sec=60, min_silence=0.5,
     y, _ = librosa.load(path, sr=sr, mono=True)
     stem = base_name or os.path.splitext(os.path.basename(path))[0]
     written = []
-    for i, (start, end) in enumerate(
-            _split_intervals(y, sr, max_sec, min_silence, top_db)):
+    for i, (start, end) in enumerate(_split_intervals(y, sr, max_sec, min_silence, top_db)):
         out_path = os.path.join(out_dir, f"{stem}_{i:03d}.wav")
         sf.write(out_path, y[start:end], sr, subtype="PCM_16")
         written.append(out_path)
     return written
 
 
-def make_rvc_dataset(src_dir, out_dir, speaker_id=0, max_sec=60, sr=48000,
-                     min_silence=0.5, top_db=40):
+def make_rvc_dataset(
+    src_dir, out_dir, speaker_id=0, max_sec=60, sr=48000, min_silence=0.5, top_db=40
+):
     """Preprocess a folder of recordings into an RVC-ready dataset.
 
     Splits every audio file on silence (hard-capping segments at max_sec) and
@@ -151,8 +150,7 @@ def record_mic(out_path, duration, sr=16000, device=None):
     import sounddevice as sd
 
     if duration > 0:
-        data = sd.rec(int(duration * sr), samplerate=sr, channels=1,
-                      dtype="float32", device=device)
+        data = sd.rec(int(duration * sr), samplerate=sr, channels=1, dtype="float32", device=device)
         sd.wait()
         frames = data
         seconds = duration
@@ -162,10 +160,8 @@ def record_mic(out_path, duration, sr=16000, device=None):
         counter = {"n": 0}
 
         def _stop_on_enter():
-            try:
+            with contextlib.suppress(EOFError):
                 input("Press Enter to stop recording...\n")
-            except EOFError:
-                pass
             stop.set()
 
         def _callback(indata, frames_count, time_info, status):
@@ -173,8 +169,9 @@ def record_mic(out_path, duration, sr=16000, device=None):
             counter["n"] += frames_count
 
         threading.Thread(target=_stop_on_enter, daemon=True).start()
-        with sd.InputStream(samplerate=sr, channels=1, dtype="float32",
-                            device=device, callback=_callback):
+        with sd.InputStream(
+            samplerate=sr, channels=1, dtype="float32", device=device, callback=_callback
+        ):
             while not stop.is_set():
                 sd.sleep(100)
         data = np.concatenate(frames, axis=0) if frames else np.zeros((0, 1))

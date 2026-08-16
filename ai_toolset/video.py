@@ -8,8 +8,16 @@ import time
 import cv2
 
 
-def extract_frames(video_path, out_dir, mode="random", count=0, min_skip=100,
-                   max_skip=2500, ext="jpg", start_index=0):
+def extract_frames(
+    video_path,
+    out_dir,
+    mode="random",
+    count=0,
+    min_skip=100,
+    max_skip=2500,
+    ext="jpg",
+    start_index=0,
+):
     """Extract frames from a video.
 
     mode "random": skip a random number of frames (min_skip..max_skip) between
@@ -123,8 +131,7 @@ def record_screen(region, out_path, duration=0, fps=20, codec="mp4v"):
     return frames
 
 
-def webcam_capture(camera=0, out_path=None, duration=0, fps=20, codec="mp4v",
-                   save_dir=None):
+def webcam_capture(camera=0, out_path=None, duration=0, fps=20, codec="mp4v", save_dir=None):
     """Show the webcam with record/snapshot controls.
 
     Keys in the preview window: r = toggle recording, s = save a snapshot JPG,
@@ -155,9 +162,15 @@ def webcam_capture(camera=0, out_path=None, duration=0, fps=20, codec="mp4v",
             if writer is not None:
                 writer.write(frame)
                 recorded += 1
-            cv2.putText(frame, "REC" if writer else "idle",
-                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9,
-                        (0, 0, 255) if writer else (0, 255, 0), 2)
+            cv2.putText(
+                frame,
+                "REC" if writer else "idle",
+                (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.9,
+                (0, 0, 255) if writer else (0, 255, 0),
+                2,
+            )
             cv2.imshow("webcam", frame)
             key = cv2.waitKey(1) & 0xFF
             if key in (ord("q"), 27):

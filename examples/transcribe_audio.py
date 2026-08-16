@@ -14,8 +14,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("audio", help="audio file to transcribe")
     parser.add_argument("--engine", choices=["whisper", "faster"], default="faster")
-    parser.add_argument("--model", default="base",
-                        help="whisper size or HF name (tiny/base/small/medium/large-v3)")
+    parser.add_argument(
+        "--model", default="base", help="whisper size or HF name (tiny/base/small/medium/large-v3)"
+    )
     parser.add_argument("--language", help="audio language code (default: auto)")
     parser.add_argument("--gpus", help="comma-separated GPU indices, e.g. 0,1")
     args = parser.parse_args()
@@ -23,14 +24,15 @@ def main():
     gpus = [int(x) for x in args.gpus.split(",")] if args.gpus else None
 
     if args.engine == "whisper":
-        result = speech.transcribe_whisper(args.audio, model=args.model,
-                                           language=args.language, gpus=gpus)
+        result = speech.transcribe_whisper(
+            args.audio, model=args.model, language=args.language, gpus=gpus
+        )
         print(result["text"].strip())
     else:
-        segments, info = speech.transcribe_faster(args.audio, model=args.model,
-                                                  language=args.language, gpus=gpus)
-        print(f"detected language: {info.language} "
-              f"(p={info.language_probability:.2f})")
+        segments, info = speech.transcribe_faster(
+            args.audio, model=args.model, language=args.language, gpus=gpus
+        )
+        print(f"detected language: {info.language} (p={info.language_probability:.2f})")
         for line in speech.segment_lines(segments):
             print(line)
 

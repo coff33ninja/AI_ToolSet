@@ -16,9 +16,18 @@ the data.yaml. Weights download into the local ultralytics cache on first use.
 import os
 
 
-def train_yolo(data_yaml, model="yolov8n.pt", epochs=100, imgsz=640,
-               batch=16, gpus=None, project="runs", name="detect",
-               exist_ok=False, patience=50):
+def train_yolo(
+    data_yaml,
+    model="yolov8n.pt",
+    epochs=100,
+    imgsz=640,
+    batch=16,
+    gpus=None,
+    project="runs",
+    name="detect",
+    exist_ok=False,
+    patience=50,
+):
     """Train a YOLO model on a dataset. Returns the training results object.
 
     gpus= restricts which physical GPUs are visible (via CUDA_VISIBLE_DEVICES
@@ -35,8 +44,14 @@ def train_yolo(data_yaml, model="yolov8n.pt", epochs=100, imgsz=640,
 
     model_obj = YOLO(model)
     return model_obj.train(
-        data=data_yaml, epochs=epochs, imgsz=imgsz, batch=batch,
-        device="0", project=project, name=name, exist_ok=exist_ok,
+        data=data_yaml,
+        epochs=epochs,
+        imgsz=imgsz,
+        batch=batch,
+        device="0",
+        project=project,
+        name=name,
+        exist_ok=exist_ok,
         patience=patience,
     )
 
