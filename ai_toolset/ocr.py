@@ -23,15 +23,22 @@ def ocr_frame(frame, language="en"):
     """OCR a BGR numpy frame. Returns (text, lines)."""
     import winocr
 
-    result = winocr.recognize_cv2(frame, language)
+    # winocr's recognize_cv2*_sync wrappers return a plain dict/picklify
+    # structure: {"text": ..., "lines": [{"text": ..., "words": [...]}, ...]}
+    result = winocr.recognize_cv2_sync(frame, language) or {}
+    raw_lines = result.get("lines") or []
     lines = []
-    for line in getattr(result, "lines", []):
+    for i, line in enumerate(raw_lines):
+        line_text = line.get("text", "").strip() if isinstance(line, dict) else str(line).strip()
+        if not line_text:
+            continue
         lines.append({
-            "text": getattr(line, "text", ""),
-            "line_index": getattr(line, "line_index", 0),
-            "word_count": getattr(line, "word_count", 0),
+            "text": line_text,
+            "line_index": i,
+            "word_count": len(line.get("words", [])) if isinstance(line, dict) else 0,
         })
-    return getattr(result, "text", "").strip(), lines
+    text = (result.get("text") or "").strip()
+    return text, lines
 
 
 def ocr_screen(region=None, language="en"):
