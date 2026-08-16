@@ -26,3 +26,6 @@ yolov8n.pt
 ocr_test.png
 test_tts.wav
 aug_out/
+
+# IDE / editor local files
+.vscode/
