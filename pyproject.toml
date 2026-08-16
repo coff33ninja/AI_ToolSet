@@ -1,9 +1,41 @@
 [project]
 name = "ai-toolset"
 version = "0.1.0"
-description = "Reusable AI toolkit: project-local CUDA/cuDNN provisioning, screen capture, video frame tools, synthetic dataset generation, image/label utilities, GPU selection, and voice cloning / speech-to-text / text-to-speech for GPU-accelerated ML projects."
+description = "GPU-accelerated ML toolkit for Windows: project-local CUDA/cuDNN provisioning, YOLO detection & training, OCR, STT/TTS voice cloning, screen capture, video frame and dataset tools."
 readme = "README.md"
 requires-python = ">=3.10,<3.11"
+license = { file = "LICENSE" }
+keywords = [
+    "machine-learning",
+    "cuda",
+    "tensorflow",
+    "pytorch",
+    "yolo",
+    "object-detection",
+    "ocr",
+    "speech-to-text",
+    "text-to-speech",
+    "voice-cloning",
+    "rvc",
+    "mediapipe",
+    "computer-vision",
+    "gpu",
+    "windows",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: GPU :: NVIDIA CUDA",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Multimedia :: Graphics :: Capture :: Screen Capture",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
+urls = { Repository = "https://github.com/coff33ninja/AI_ToolSet" }
 dependencies = [
     "numpy==1.23.5",
     "tensorflow==2.10",

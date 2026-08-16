@@ -1,5 +1,10 @@
 # AI ToolSet
 
+[![CI](https://github.com/coff33ninja/AI_ToolSet/actions/workflows/ci.yml/badge.svg)](https://github.com/coff33ninja/AI_ToolSet/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.10](https://img.shields.io/badge/python-3.10-blue.svg)](pyproject.toml)
+[![uv](https://img.shields.io/badge/packaging-uv-7b3be3.svg)](https://docs.astral.sh/uv/)
+
 Reusable toolkit for GPU-accelerated machine learning projects on Windows. It
 solves the two things every local TF/PyTorch project trips over:
 
@@ -28,7 +33,6 @@ toolkit keeps the DLLs in `cuda_runtime/bin` and prepends that folder to
 
 Nothing is guessed:
 
-- The TensorFlow -> CUDA/cuDNN mapping is a verified table (below).
 - The TensorFlow -> CUDA/cuDNN mapping is a verified table (below).
 - The CUDA runtime DLLs (cudart, cublas, cufft, curand, cusolver, cusparse)
   come from NVIDIA's own redistributable wheels on PyPI (`nvidia-*-cu11`),
