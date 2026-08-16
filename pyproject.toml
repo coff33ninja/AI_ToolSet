@@ -59,7 +59,15 @@ tts = [
 dev = ["ruff"]
 
 [tool.uv]
-package = false
+  package = false
+
+  # Cache project-locally on the workspace drive (E:) instead of the default
+  # %LOCALAPPDATA%\uv\cache on the system drive. The target drive is a
+  # different filesystem, so cross-drive hardlinks are impossible - copy mode
+  # is what uv falls back to anyway and silences the warning.
+  cache-dir = ".uv-cache"
+  link-mode = "copy"
+
 
 # This toolkit targets Windows only (TensorFlow 2.10 native-Windows GPU). Pin
 # resolution to win32 so Linux/macOS marker splits never try to satisfy
