@@ -52,6 +52,15 @@ powershell -ExecutionPolicy Bypass -File scripts/get_cuda_runtime.ps1
 powershell -ExecutionPolicy Bypass -File scripts/verify_cuda.ps1 -RunTensorFlowCheck
 ```
 
+Most features are opt-in extras so the base install stays lean. To enable
+everything at once (mediapipe/web/ui included; `rvc` and `diarize` conflict
+and cannot coexist):
+
+```powershell
+uv sync --extra rvc --extra voice --extra vision --extra audio --extra ocr `
+       --extra stt --extra tts --extra mediapipe --extra web --extra ui
+```
+
 The last command prints your GPU, driver, runtime DLL status, and whether
 TensorFlow actually sees the GPU. Expected output ends with:
 
@@ -201,6 +210,56 @@ uv run python -m ai_toolset augment data/images out/ --per-image 5
 uv run python -m ai_toolset ocr screenshot.png --language en
 ```
 
+## MediaPipe landmarks
+
+Live face/hands/pose/holistic landmarks and selfie segmentation on webcam
+frames, via the mediapipe `solutions` API:
+
+```powershell
+uv sync --extra mediapipe
+uv run python -m ai_toolset mediapipe --camera 0 --solution pose   # s=save, q=quit
+```
+
+`--solution` accepts `pose`, `hands`, `face`, `holistic`, or `selfie`.
+MediaPipe 0.10.9 is pinned: later 0.10.x wheels ship only the `tasks` API
+(whose `.task` model files are separate downloads), and 0.10.14+ requires
+protobuf 4.x, which TensorFlow 2.10 cannot run with. Its `opencv-contrib`
+dependency is forced to the shared 4.10.0.84 pin.
+
+## Web dashboard and quick UI
+
+Two frontends over the same underlying modules, both fully local.
+
+```powershell
+uv sync --extra web                # FastAPI dashboard
+uv sync --extra ui                 # Streamlit quick-UI
+```
+
+```powershell
+uv run python -m ai_toolset web    # serves http://127.0.0.1:8000 (opens browser)
+uv run python -m ai_toolset ui     # launches Streamlit (opens browser)
+```
+
+The FastAPI dashboard (`webapp.py` + `ai_toolset/web/`) has tabs for status,
+OCR, YOLO detection, transcription, TTS, latency benchmarks, and a webcam
+stream with a mediapipe overlay dropdown. GPU multi-select drives every
+model call. The Streamlit app (`streamlit_app.py`) is the same feature set in
+a lighter wrapper, plus a model-downloads tab.
+
+### Model downloads
+
+`models.py` centralizes the downloads that are not automatic, and reports
+status for the ones that are:
+
+```powershell
+uv run python -m ai_toolset get-models              # status table
+uv run python -m ai_toolset get-models --yolo       # ultralytics weights (auto at first use)
+uv run python -m ai_toolset get-models --whisper base
+uv run python -m ai_toolset get-models --tts
+uv run python -m ai_toolset get-models --diarize    # needs a gated HF token
+uv run python -m ai_toolset get-models --rvc model.pth
+```
+
 ## Voice conversion (RVC) and diarization
 
 Two heavy, mutually-exclusive extras. RVC needs `rvc-python` + `fairseq`
@@ -278,6 +337,10 @@ uv run python -m ai_toolset narrate lines.txt
 uv run python -m ai_toolset benchmark --image frame.png --gpus 0,1
 uv run python -m ai_toolset voice-convert in.wav out.wav --model model.pth   # uv sync --extra rvc
 uv run python -m ai_toolset diarize in.wav --token hf_... --out out.rttm     # uv sync --extra diarize
+uv run python -m ai_toolset mediapipe --solution pose                       # uv sync --extra mediapipe
+uv run python -m ai_toolset web                                             # uv sync --extra web
+uv run python -m ai_toolset ui                                              # uv sync --extra ui
+uv run python -m ai_toolset get-models --status                             # model status/downloads
 ```
 
 ### GPU selection
@@ -334,6 +397,13 @@ uv run python examples/select_gpu.py --gpus 0,1 --framework auto
 - `diarize` - `diarize()` pyannote speaker diarization (requires
   `uv sync --extra diarize`)
 - `benchmark` - `benchmark_stt()`, `benchmark_yolo()`, `print_table()`
+- `mp` - `available()`, `process_frame()`, `annotate()`, `overlay()`,
+  `webcam_stream()` (requires `uv sync --extra mediapipe`)
+- `webapp` - `create_app()` FastAPI dashboard + `main()` uvicorn launcher
+  (requires `uv sync --extra web`)
+- `models` - `ensure_yolo()`, `ensure_whisper()`, `ensure_tts()`,
+  `ensure_diarize()`, `ensure_rvc()`, `summarize()` - model download/status
+- `streamlit_app` - Streamlit quick-UI entry point (requires `uv sync --extra ui`)
 
 See `examples/verify_gpu.py`, `examples/make_synthetic_dataset.py`,
 `examples/select_gpu.py`, and `examples/prepare_voice_dataset.py`.

@@ -420,6 +420,65 @@ def cmd_diarize(args):
     return 0
 
 
+def cmd_mediapipe(args):
+    from ai_toolset.mp import webcam_stream
+
+    index = 0
+    for frame in webcam_stream(camera=args.camera, solution=args.solution,
+                               mirror=not args.no_mirror):
+        cv2.imshow("mediapipe", frame)
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord("s"):
+            cv2.imwrite(os.path.join(args.save_dir, f"{index:05d}.jpg"), frame)
+            index += 1
+            print(f"Saved frame {index}")
+        if key == ord("q"):
+            break
+    cv2.destroyAllWindows()
+    return 0
+
+
+def cmd_web(args):
+    from ai_toolset.webapp import main as webapp_main
+
+    argv = ["--host", args.host, "--port", str(args.port)]
+    if args.open:
+        argv.append("--open")
+    if args.gpus:
+        argv += ["--gpus", args.gpus]
+    return webapp_main(argv)
+
+
+def cmd_ui(args):
+    from ai_toolset import streamlit_app
+
+    module = os.path.abspath(streamlit_app.__file__)
+    os.execv(sys.executable, [sys.executable, "-m", "streamlit", "run",
+                              module, "--server.headless", "true",
+                              "--server.port", str(args.port)])
+    return 0
+
+
+def cmd_get_models(args):
+    from ai_toolset.models import main as models_main
+
+    argv = []
+    for flag, value in (("--yolo", args.yolo), ("--whisper", args.whisper),
+                        ("--tts", args.tts), ("--diarize", args.diarize),
+                        ("--rvc", args.rvc)):
+        if value is not None:
+            argv.append(flag)
+            if value is not True:
+                argv.append(str(value))
+    if args.status:
+        argv.append("--status")
+    if args.engine:
+        argv += ["--engine", args.engine]
+    if args.gpus:
+        argv += ["--gpus", args.gpus]
+    return models_main(argv)
+
+
 def build_parser():
     parser = argparse.ArgumentParser(prog="python -m ai_toolset",
                                      description="Reusable AI toolkit CLI")
@@ -691,6 +750,46 @@ def build_parser():
     p.add_argument("--max-speakers", type=int)
     p.add_argument("--gpus", help="comma-separated physical GPU indices")
     p.set_defaults(func=cmd_diarize)
+
+    p = sub.add_parser("mediapipe",
+                       help="live MediaPipe overlay (pose/hands/face/holistic/"
+                            "selfie); s=save, q=quit")
+    p.add_argument("--camera", type=int, default=0)
+    p.add_argument("--solution", choices=["pose", "hands", "face", "holistic",
+                                          "selfie"], default="pose")
+    p.add_argument("--no-mirror", action="store_true")
+    p.add_argument("--save-dir", default="mediapipe_frames")
+    p.set_defaults(func=cmd_mediapipe)
+
+    p = sub.add_parser("web", help="serve the AI ToolSet web dashboard "
+                                   "(fastapi extra)")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8000)
+    p.add_argument("--open", action="store_true", help="open the browser")
+    p.add_argument("--gpus", help="comma-separated GPU indices used by default")
+    p.set_defaults(func=cmd_web)
+
+    p = sub.add_parser("ui", help="launch the Streamlit quick-UI (ui extra)")
+    p.add_argument("--port", type=int, default=8501)
+    p.set_defaults(func=cmd_ui)
+
+    p = sub.add_parser("get-models", help="pre-download model weights "
+                                          "(or show status)")
+    p.add_argument("--yolo", nargs="?", const="yolov8n.pt", default=None,
+                   metavar="WEIGHTS", help="download YOLO weights")
+    p.add_argument("--whisper", nargs="?", const="base", default=None,
+                   metavar="SIZE", help="download a whisper model")
+    p.add_argument("--tts", nargs="?", const="tts_models/en/ljspeech/tacotron2-DDC",
+                   default=None, metavar="MODEL", help="download a coqui TTS model")
+    p.add_argument("--diarize", nargs="?", const=True, default=None,
+                   metavar="TOKEN", help="HF token for pyannote diarization")
+    p.add_argument("--rvc", metavar="MODEL_PATH",
+                   help="validate a user-trained RVC .pth model path")
+    p.add_argument("--status", action="store_true", help="print model status table")
+    p.add_argument("--engine", choices=["faster", "whisper"], default="faster",
+                   help="whisper engine (default faster)")
+    p.add_argument("--gpus", help="comma-separated physical GPU indices")
+    p.set_defaults(func=cmd_get_models)
 
     return parser
 

@@ -8,7 +8,7 @@ dependencies = [
     "numpy==1.23.5",
     "tensorflow==2.10",
     "keras==2.10",
-    "opencv-python==4.10.0.84",
+    "opencv-python",
     "Pillow",
     "mss",
     "pyautogui",
@@ -93,6 +93,33 @@ tts = [
     "click",
 ]
 
+# MediaPipe: face/hands/pose/holistic landmarks + selfie segmentation on
+# webcam frames. 0.10.9 pinned (last cp310-win wheel whose `solutions` API is
+# bundled AND whose protobuf<4,>=3.11 constraint fits TF 2.10's protobuf
+# 3.19.6 pin - 0.10.14+ needs protobuf>=4.25, which TF 2.10 cannot run with).
+# opencv-contrib-python is unpinned in its metadata, so the shared
+# opencv-python==4.10.0.84 override keeps both cv2 providers identical.
+# Install with: uv sync --extra mediapipe
+mediapipe = [
+    "mediapipe==0.10.9",
+]
+
+# Web dashboard: FastAPI + uvicorn serving the ai_toolset webapp (OCR,
+# detection, STT/TTS, benchmark, MediaPipe webcam stream).
+# Install with: uv sync --extra web
+web = [
+    "fastapi",
+    "uvicorn",
+    "python-multipart",
+]
+
+# Streamlit quick-UI for STT/TTS/detection demos. Separate extra so its
+# heavier graph (pandas/pyarrow/altair) can never break the FastAPI dashboard.
+# Install with: uv sync --extra ui
+ui = [
+    "streamlit",
+]
+
 [dependency-groups]
 dev = ["ruff"]
 
@@ -147,12 +174,28 @@ environments = ["sys_platform == 'win32'"]
 # coqui-tts 0.24.x imports transformers.LogitsWarper (XTTS/autoregressive),
 # which transformers 5.x removed - the resolver would otherwise pull the
 # latest. 4.40.2 is the version the coqui-tts release was built against.
+#
+# mediapipe 0.10.14 requires opencv-contrib-python==4.10.0.84. Two providers in
+# one env means their cv2 packages share files on disk (uv's per-package RECORD
+# then misattributes cv2.pyd and a sync can delete it). Pin BOTH opencv-python
+# and opencv-contrib-python to the identical 4.10.0.84 wheel so the on-disk cv2
+# is the same superset no matter which one lands last - matching the 4.10 line
+# the vision/OCR stacks were verified against.
+# mediapipe 0.10.9 needs protobuf 3.20.x: its generated _pb2.py still does
+# `from google.protobuf.internal import builder`, and 3.20.3 is the only
+# wheel that ships builder.py (removed in 3.21/4.x; 3.19 and older never
+# packaged it). TF 2.10 declares <3.20 but runs fine on 3.20.3; streamlit
+# 1.22 declares >=3.20 so it is actually satisfied here. Do not bump to 4.x
+# while the mediapipe extra is in the profile (TF 2.10 would break).
 override-dependencies = [
     "numpy==1.23.5",
+    "protobuf==3.20.3",
     "tensorflow-io-gcs-filesystem==0.31.0",
     "tensorboard==2.10.1",
     "numba==0.57.1",
     "transformers==4.40.2",
+    "opencv-python==4.10.0.84",
+    "opencv-contrib-python==4.10.0.84",
 ]
 
 [[tool.uv.index]]

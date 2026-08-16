@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI ToolSet</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>AI ToolSet</h1>
+  <div id="gpu-badge" class="badge">detecting GPUs...</div>
+</header>
+
+<nav id="tabs">
+  <button class="tab active" data-tab="status">Status</button>
+  <button class="tab" data-tab="ocr">OCR</button>
+  <button class="tab" data-tab="detect">Detect</button>
+  <button class="tab" data-tab="transcribe">Transcribe</button>
+  <button class="tab" data-tab="tts">TTS</button>
+  <button class="tab" data-tab="benchmark">Benchmark</button>
+  <button class="tab" data-tab="webcam">Webcam</button>
+</nav>
+
+<main>
+  <section id="tab-status" class="panel active">
+    <h2>Extras</h2>
+    <div id="extras" class="chips"></div>
+    <h2>GPUs</h2>
+    <table id="gpu-table"><thead><tr><th>idx</th><th>name</th><th>driver</th><th>VRAM</th></tr></thead><tbody></tbody></table>
+  </section>
+
+  <section id="tab-ocr" class="panel">
+    <div class="row">
+      <label class="radio"><input type="radio" name="ocr-src" value="file" checked> upload image</label>
+      <label class="radio"><input type="radio" name="ocr-src" value="screen"> screen</label>
+      <input id="ocr-file" type="file" accept="image/*">
+      <button id="ocr-run">OCR</button>
+    </div>
+    <pre id="ocr-out" class="out"></pre>
+  </section>
+
+  <section id="tab-detect" class="panel">
+    <div class="row">
+      <input id="det-file" type="file" accept="image/*">
+      <input id="det-conf" type="number" value="0.25" step="0.05" min="0" max="1" title="confidence">
+      <button id="det-run">Detect</button>
+    </div>
+    <div class="split">
+      <img id="det-img" alt="" hidden>
+      <table id="det-table" class="table"><thead><tr><th>label</th><th>conf</th><th>box</th></tr></thead><tbody></tbody></table>
+    </div>
+  </section>
+
+  <section id="tab-transcribe" class="panel">
+    <div class="row">
+      <input id="stt-file" type="file" accept="audio/*">
+      <button id="stt-run">Transcribe</button>
+    </div>
+    <pre id="stt-out" class="out"></pre>
+  </section>
+
+  <section id="tab-tts" class="panel">
+    <div class="row">
+      <textarea id="tts-text" rows="2" placeholder="text to speak"></textarea>
+      <input id="tts-speaker" type="file" accept="audio/*" title="optional reference wav for XTTS voice cloning">
+      <button id="tts-run">Synthesize</button>
+    </div>
+    <audio id="tts-audio" controls hidden></audio>
+  </section>
+
+  <section id="tab-benchmark" class="panel">
+    <div class="row">
+      <label>GPUs <select id="bench-gpus" multiple></select></label>
+      <input id="bench-img" type="file" accept="image/*" title="optional image for YOLO (defaults to STT)">
+      <input id="bench-iter" type="number" value="3" min="1" max="20">
+      <button id="bench-run">Run</button>
+    </div>
+    <table id="bench-table" class="table"><thead><tr><th>gpu</th><th>task</th><th>model</th><th>mean</th><th>min</th></tr></thead><tbody></tbody></table>
+  </section>
+
+  <section id="tab-webcam" class="panel">
+    <div class="row">
+      <select id="cam-solution">
+        <option value="pose">pose</option>
+        <option value="hands">hands</option>
+        <option value="face">face</option>
+        <option value="holistic">holistic</option>
+        <option value="selfie">selfie</option>
+        <option value="none">off</option>
+      </select>
+      <button id="cam-toggle">Start</button>
+    </div>
+    <img id="cam-img" alt="" hidden>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

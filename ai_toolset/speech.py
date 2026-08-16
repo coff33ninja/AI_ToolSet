@@ -118,6 +118,34 @@ def synthesize_tts(text, out_path, model_name="tts_models/multilingual/multi-dat
     return out_path
 
 
+def download_whisper(model="base", engine="faster", gpus=None):
+    """Pre-download a whisper model without transcribing anything.
+
+    engine "whisper" downloads into ~/.cache/whisper via openai-whisper;
+    engine "faster" downloads into the Hugging Face cache via faster-whisper.
+    """
+    if engine == "faster":
+        _apply_gpus(gpus)
+        from faster_whisper import WhisperModel
+
+        WhisperModel(model, device="cpu")
+    else:
+        import whisper
+
+        whisper.load_model(model, device="cpu")
+    return model
+
+
+def download_tts(model_name="tts_models/en/ljspeech/tacotron2-DDC", gpus=None):
+    """Pre-download a Coqui TTS model into the local cache."""
+    _apply_gpus(gpus)
+    _coqui_numpy_compat()
+    from TTS.api import TTS
+
+    TTS(model_name, gpu=False)
+    return model_name
+
+
 def _coqui_numpy_compat():
     """Shim coqui-tts's numpy>=1.24 requirement onto the TF-pinned 1.23.5.
 

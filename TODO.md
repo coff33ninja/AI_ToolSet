@@ -21,6 +21,15 @@ repo; `[ ]` = planned or not yet verified. Update this file as work lands.
 - [x] TTS fine-tune dataset builder — folded into `tts-batch --metadata metadata.csv`
 - [x] OCR — `ocr` (Windows.Media.Ocr via winocr, no model downloads)
 - [x] Benchmark — `benchmark` (per-engine/per-GPU latency)
+- [x] MediaPipe — `mediapipe` live landmark/selfie overlay CLI + `mp` module
+      (pose/hands/face/holistic/selfie; verified end-to-end in smoke test)
+- [x] Web dashboard — `web` FastAPI dashboard + `webapp` module + `ai_toolset/web/`
+      frontend (status/OCR/detect/transcribe/TTS/benchmark/webcam + GPU select)
+- [x] Streamlit quick-UI — `ui` command + `streamlit_app.py` (STT/TTS/Detect/OCR/
+      model downloads tabs)
+- [x] Model downloader — `get-models` command + `models` module (yolo/whisper/tts/
+      diarize/rvc status + download)
+- [x] Smoke test — `examples/smoke_test.py` (17-step battery, 17/17 passing)
 
 ## Incomplete
 
@@ -36,5 +45,11 @@ repo; `[ ]` = planned or not yet verified. Update this file as work lands.
   (rvc) needs `hydra-core<1.1` → `omegaconf<2.1`, the pyannote stack (diarize)
   needs `omegaconf>=2.1`, so they cannot share one environment. Install one
   profile: `uv sync --extra rvc` **or** `uv sync --extra diarize`.
-- Canonical sync for everything else: `uv sync --all-extras` (syncs only the
-  extras you pass — plain `uv sync` prunes extra-only packages).
+- Canonical sync for everything except the conflicting pair:
+  `uv sync --extra rvc --extra voice --extra vision --extra audio --extra ocr
+  --extra stt --extra tts --extra mediapipe --extra web --extra ui`.
+- MediaPipe pins (verified): `mediapipe==0.10.9`, `protobuf==3.20.3`,
+  `opencv-contrib-python==4.10.0.84` + `opencv-python==4.10.0.84` both
+  overridden. 0.10.31+ wheels ship only the `tasks` API; 0.10.14+ needs
+  protobuf>=4.25 which breaks TF 2.10; protobuf 3.20.3 is the only wheel that
+  still ships `internal/builder.py` that mediapipe's generated pb2 imports.
