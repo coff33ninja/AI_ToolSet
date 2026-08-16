@@ -181,6 +181,36 @@ def cmd_audio_rvc(args):
     return 0
 
 
+def cmd_transcribe(args):
+    from ai_toolset import speech
+
+    gpus = [int(x) for x in args.gpus.split(",")] if args.gpus else None
+    if args.engine == "whisper":
+        result = speech.transcribe_whisper(args.audio, model=args.model,
+                                           language=args.language,
+                                           task=args.task, gpus=gpus)
+        print(result["text"].strip())
+    else:
+        segments, info = speech.transcribe_faster(args.audio, model=args.model,
+                                                  language=args.language,
+                                                  gpus=gpus)
+        print(f"[{info.language}] p={info.language_probability:.2f}")
+        for line in speech.segment_lines(segments):
+            print(line)
+    return 0
+
+
+def cmd_tts(args):
+    from ai_toolset import speech
+
+    gpus = [int(x) for x in args.gpus.split(",")] if args.gpus else None
+    speech.synthesize_tts(args.text, args.out, model_name=args.model,
+                          speaker_wav=args.speaker, language=args.language,
+                          gpus=gpus)
+    print(f"Wrote {args.out}")
+    return 0
+
+
 def build_parser():
     parser = argparse.ArgumentParser(prog="python -m ai_toolset",
                                      description="Reusable AI toolkit CLI")
@@ -279,6 +309,29 @@ def build_parser():
     p.add_argument("--top-db", type=float, default=40,
                    help="dB below loudest frame that counts as silence (positive)")
     p.set_defaults(func=cmd_audio_rvc)
+
+    p = sub.add_parser("transcribe", help="speech-to-text with whisper or faster-whisper")
+    p.add_argument("audio")
+    p.add_argument("--engine", choices=["whisper", "faster"], default="faster",
+                   help="backend engine (default faster)")
+    p.add_argument("--model", default="base",
+                   help="whisper model size or HF name, e.g. tiny/base/small/medium/large-v3")
+    p.add_argument("--language", help="audio language code (default: auto-detect)")
+    p.add_argument("--task", choices=["transcribe", "translate"], default="transcribe",
+                   help="whisper-only: translate=English output")
+    p.add_argument("--gpus", help="comma-separated physical GPU indices, e.g. '0' or '0,1'")
+    p.set_defaults(func=cmd_transcribe)
+
+    p = sub.add_parser("tts", help="text-to-speech with Coqui XTTS v2 voice cloning")
+    p.add_argument("text")
+    p.add_argument("out")
+    p.add_argument("--model", default="tts_models/multilingual/multi-dataset/xtts_v2",
+                   help="coqui model name (default XTTS v2; requires --speaker)")
+    p.add_argument("--speaker",
+                   help="reference wav for voice cloning (>= 6 s; XTTS requires it)")
+    p.add_argument("--language", default="en", help="language for multilingual models")
+    p.add_argument("--gpus", help="comma-separated physical GPU indices, e.g. '0' or '0,1'")
+    p.set_defaults(func=cmd_tts)
 
     return parser
 

@@ -119,11 +119,55 @@ RVC webui expects for preprocessing. Point the webui's dataset folder at the
 output and its training tab at your model folder - both run locally from your
 venv.
 
+## Speech-to-text and text-to-speech
+
+Same philosophy, two more extras. **Everything stays inside `.venv`.**
+
+```powershell
+uv sync --extra stt              # openai-whisper + faster-whisper + NVIDIA CUDA 12 runtime
+uv sync --extra tts              # coqui-tts (XTTS v2, tacotron2, ...)
+powershell -ExecutionPolicy Bypass -File scripts/get_cuda_runtime.ps1 -Framework fasterwhisper
+```
+
+### STT engines
+
+- **whisper** (OpenAI, `transcribe_whisper`): runs on the cu118 torch from the
+  `voice` extra. Higher quality, slower.
+- **faster-whisper** (CTranslate2, `transcribe_faster`): CTranslate2 is the
+  default engine - a lean transformer runtime with a VAD filter and ~4x
+  faster decoding. Same model names (`tiny`, `base`, `small`, `medium`,
+  `large-v3`), auto-fp16 on GPU, `int8` on CPU.
+
+For GPU, CTranslate2's official wheels already bundle cuDNN 9
+(`cudnn64_9.dll` sits inside the wheel). The only missing Windows runtime
+pieces are the CUDA 12 cuBLAS + cudart DLLs, so the `stt` extra installs
+**NVIDIA's own redistributable wheels** (`nvidia-cublas-cu12`,
+`nvidia-cuda-runtime-cu12`) into `.venv`, and `sitecustomize.py` puts their
+`site-packages/nvidia/*/lib` dirs on `PATH` at interpreter startup. No system
+CUDA install, no cuDNN download, no conda. CPU works out of the box.
+
+```powershell
+uv run python -m ai_toolset transcribe audio.wav --engine faster --model base --language en --gpus 0
+uv run python -m ai_toolset transcribe audio.wav --engine whisper --model base --gpus 0
+uv run python examples/transcribe_audio.py audio.wav
+```
+
+### TTS (voice cloning)
+
+`coqui-tts` runs on the same torch. XTTS v2 clones a voice from one reference
+clip; smaller English models (ljspeech/tacotron2-DDC) need none:
+
+```powershell
+uv run python -m ai_toolset tts "Hello from the toolset." out.wav --speaker ref.wav
+uv run python -m ai_toolset tts "Hello from the toolset." out.wav --model tts_models/en/ljspeech/tacotron2-DDC
+uv run python examples/synthesize_speech.py "Hello" out.wav
+```
+
 ## Scripts
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/get_cuda_runtime.ps1` | Download + extract CUDA/cuDNN DLLs into `cuda_runtime/bin`, install `sitecustomize.py` into the venv. Idempotent. With `-Framework pytorch`: driver-only check, no downloads. |
+| `scripts/get_cuda_runtime.ps1` | Download + extract CUDA/cuDNN DLLs into `cuda_runtime/bin`, install `sitecustomize.py` into the venv. Idempotent. With `-Framework pytorch` or `-Framework fasterwhisper`: driver-only check, no downloads. |
 | `scripts/verify_cuda.ps1` | Report GPU/driver status, runtime DLL count, real TF GPU detection (`-RunTensorFlowCheck`), and torch GPU detection (`-CheckTorch`). |
 
 ## Python package
@@ -148,6 +192,8 @@ uv run python -m ai_toolset xml-to-csv labels/ labels.csv
 uv run python -m ai_toolset select-region
 uv run python -m ai_toolset capture-loop --out-dir frames --square
 uv run python -m ai_toolset audio-rvc CLEAN/ RVC_DATA/ --speaker 0
+uv run python -m ai_toolset transcribe audio.wav --engine faster --model base --gpus 0
+uv run python -m ai_toolset tts "Hello from the toolset." out.wav --speaker ref.wav
 ```
 
 ### GPU selection

@@ -1,7 +1,7 @@
 [project]
 name = "ai-toolset"
 version = "0.1.0"
-description = "Reusable AI toolkit: project-local CUDA/cuDNN provisioning, screen capture, video frame tools, synthetic dataset generation, image/label utilities, and voice-cloning dataset prep for GPU-accelerated ML projects."
+description = "Reusable AI toolkit: project-local CUDA/cuDNN provisioning, screen capture, video frame tools, synthetic dataset generation, image/label utilities, GPU selection, and voice cloning / speech-to-text / text-to-speech for GPU-accelerated ML projects."
 readme = "README.md"
 requires-python = ">=3.10,<3.11"
 dependencies = [
@@ -16,10 +16,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Voice cloning / TTS stack (RVC, XTTS v2, so-vits-svc). torch + torchaudio
-# resolve from the official PyTorch CUDA 11.8 wheel index via [tool.uv.sources]
-# below - nothing is installed system-wide, everything lives in .venv.
-# Install with: uv sync --extra voice
+# Voice cloning / TTS base stack (RVC, XTTS v2, so-vits-svc). torch +
+# torchaudio resolve from the official PyTorch CUDA 11.8 wheel index via
+# [tool.uv.sources] below - nothing is installed system-wide, everything
+# lives in .venv. Install with: uv sync --extra voice
 voice = [
     "torch",
     "torchaudio",
@@ -27,11 +27,73 @@ voice = [
     "soundfile",
 ]
 
+# Speech-to-text: OpenAI Whisper (PyTorch, uses the cu118 torch from the voice
+# extra) + faster-whisper (CTranslate2). ctranslate2's official PyPI wheels
+# bundle GPU support AND cuDNN 9 (cudnn64_9.dll sits inside the wheel), so the
+# only missing runtime pieces for GPU on Windows are the CUDA 12 cuBLAS +
+# cudart DLLs. Those come from NVIDIA's own redistributable wheels
+# (nvidia-cublas-cu12, nvidia-cuda-runtime-cu12) installed into .venv by uv -
+# sitecustomize.py puts their site-packages/nvidia/*/bin (or lib) dirs on PATH
+# at interpreter startup. Nothing is installed system-wide. CPU works out of
+# the box. Install with: uv sync --extra stt
+stt = [
+    "openai-whisper==20250625",
+    "faster-whisper",
+    "nvidia-cublas-cu12==12.9.2.10",
+    "nvidia-cuda-runtime-cu12==12.9.79",
+]
+
+# Text-to-speech: Coqui XTTS v2 voice cloning (uses the torch already pulled
+# by the voice extra). 0.24.3 is the newest release with a prebuilt
+# cp310-win_amd64 wheel - newer versions are sdist-only and their C extension
+# needs an MSVC dev shell, which conflicts with uv's isolated builds.
+# click: spacy (pulled by coqui-tts) imports it directly, but its typer dep
+# resolves to typer-slim which deliberately omits click.
+# Install with: uv sync --extra tts
+tts = [
+    "coqui-tts==0.24.3",
+    "click",
+]
+
 [dependency-groups]
 dev = ["ruff"]
 
 [tool.uv]
 package = false
+
+# This toolkit targets Windows only (TensorFlow 2.10 native-Windows GPU). Pin
+# resolution to win32 so Linux/macOS marker splits never try to satisfy
+# platform-specific conflicts (e.g. coqui-tts-trainer's tensorboard>=2.17 vs
+# TF 2.10's tensorboard<2.11) that cannot occur in the real environment.
+environments = ["sys_platform == 'win32'"]
+
+# TensorFlow 2.10 requires numpy<1.24 (numpy 1.24 removed aliases TF 2.10
+# uses). coqui-tts declares numpy>=1.24.3 in its metadata but runs fine on
+# numpy 1.23.5, so we force numpy for the whole graph - the single
+# environment must satisfy TF 2.10, torch 2.7 cu118, and TTS at once.
+#
+# tensorflow-io-gcs-filesystem is a transitive dep of TF 2.10 that stopped
+# shipping Windows wheels after 0.31.0; pin it so resolution stays on the
+# last version that works on win_amd64.
+#
+# coqui-tts-trainer (a training-only dep of coqui-tts, never imported for
+# inference) wants tensorboard>=2.17, but TF 2.10 pins tensorboard<2.11.
+# TF 2.10's own tensorboard satisfies the inference path, so force it.
+#
+# numba 0.58+ requires numpy>=1.24 (librosa pulls the latest numba), but the
+# graph is forced to numpy 1.23.5 for TF 2.10. 0.57.1 is the last numba that
+# supports numpy 1.23.
+#
+# coqui-tts 0.24.x imports transformers.LogitsWarper (XTTS/autoregressive),
+# which transformers 5.x removed - the resolver would otherwise pull the
+# latest. 4.40.2 is the version the coqui-tts release was built against.
+override-dependencies = [
+    "numpy==1.23.5",
+    "tensorflow-io-gcs-filesystem==0.31.0",
+    "tensorboard==2.10.1",
+    "numba==0.57.1",
+    "transformers==4.40.2",
+]
 
 [[tool.uv.index]]
 # PyTorch CUDA 11.8 wheels bundle CUDA/cuDNN inside the wheel (torch/lib) -

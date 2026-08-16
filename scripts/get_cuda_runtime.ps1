@@ -28,8 +28,10 @@
     project venv - no global installs, ever.
 
 .PARAMETER Framework
-    Which runtime to provision: 'tensorflow' (downloads CUDA/cuDNN DLLs) or
-    'pytorch' (driver check only, torch bundles its own runtime).
+    Which runtime to provision: 'tensorflow' (downloads CUDA/cuDNN DLLs),
+    'pytorch' (driver check only, torch bundles its own runtime), or
+    'fasterwhisper' (driver check only - the CUDA 12 runtime comes from
+    NVIDIA's own redistributable wheels in the 'stt' extra).
 
 .PARAMETER TensorFlowVersion
     TensorFlow major.minor whose runtime this project needs. Default 2.10.
@@ -62,7 +64,7 @@
 
 [CmdletBinding()]
 param(
-    [ValidateSet('tensorflow', 'pytorch')]
+    [ValidateSet('tensorflow', 'pytorch', 'fasterwhisper')]
     [string]$Framework = 'tensorflow',
     [string]$TensorFlowVersion = '2.10',
     [string]$CudaVersion,
@@ -185,6 +187,44 @@ if ($Framework -eq 'pytorch') {
         Write-Host "Then verify with:"
         $verifyCmd = '  uv run python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else ''none'')"'
         Write-Host $verifyCmd
+    }
+    return
+}
+
+if ($Framework -eq 'fasterwhisper') {
+    # faster-whisper (CTranslate2): the official ctranslate2 PyPI wheels bundle
+    # GPU support AND cuDNN 9 (cudnn64_9.dll) inside the wheel. The only
+    # missing Windows runtime pieces are the CUDA 12 cuBLAS + cudart DLLs,
+    # which come from NVIDIA's own redistributable wheels (nvidia-cublas-cu12,
+    # nvidia-cuda-runtime-cu12) in the 'stt' extra. sitecustomize.py adds their
+    # site-packages/nvidia/*/bin (or lib) dirs to PATH at interpreter startup.
+    # So, like PyTorch, nothing is downloaded here - just the driver check +
+    # verify.
+    $CudaVersion = '12.9'
+    $CudnnVersion = 'bundled-in-ctranslate2'
+    $minDriver = 570.86
+    Assert-DriverCompatible -Tool 'faster-whisper (CTranslate2)'
+    Write-Host ""
+    Write-Host "CTranslate2 wheels bundle cuDNN 9; NVIDIA's cuBLAS/cudart 12 wheels"
+    Write-Host "(nvidia-cublas-cu12, nvidia-cuda-runtime-cu12) ship via the 'stt' extra."
+    Write-Host "Nothing to download. The driver check above is the only system requirement."
+    $venvPy = Get-Python
+    if ((Test-Path $venvPy) -and (Test-Path (Join-Path $root '.venv\Lib\site-packages\ctranslate2'))) {
+        if (-not $SkipSitecustomize) {
+            $siteDir = Join-Path $root '.venv\Lib\site-packages'
+            Copy-Item -LiteralPath (Join-Path $root 'sitecustomize.py') -Destination (Join-Path $siteDir 'sitecustomize.py') -Force
+            Write-Host "Installed sitecustomize.py into $siteDir (adds the NVIDIA wheel lib dirs to PATH)."
+        }
+        Write-Host "Verifying installed faster-whisper/CTranslate2 ..."
+        & $venvPy -c "import ctranslate2; print('ctranslate2', ctranslate2.__version__, '| CUDA devices:', ctranslate2.get_cuda_device_count())"
+        if ($LASTEXITCODE -ne 0) { Write-Warning "ctranslate2 import failed - run 'uv sync --extra stt' and retry." }
+    } else {
+        Write-Host ""
+        Write-Host "Install the project-local STT stack with:"
+        Write-Host "  uv sync --extra stt"
+        Write-Host ""
+        Write-Host "Then verify with:"
+        Write-Host '  uv run python -c "import ctranslate2; print(ctranslate2.get_cuda_device_count())"'
     }
     return
 }
