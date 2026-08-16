@@ -19,13 +19,9 @@ def main():
     args = parser.parse_args()
 
     gpus = [int(x) for x in args.gpus.split(",")] if args.gpus else None
-    results = detect.detect_image(args.image, weights=args.weights,
-                                  conf=args.conf, gpus=gpus)
-    detect.annotate(args.image, args.out, results)
-    for box in results.boxes:
-        cls = results.names[int(box.cls)]
-        conf = float(box.conf)
-        print(f"{cls}: {conf:.2f}")
+    out = detect.annotate(args.image, args.out, weights=args.weights,
+                          conf=args.conf, gpus=gpus)
+    print(f"annotated -> {out}")
 
 
 if __name__ == "__main__":

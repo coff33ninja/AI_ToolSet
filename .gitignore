@@ -3,6 +3,7 @@
 .uv-cache/
 __pycache__/
 *.py[cod]
+*.egg-info/
 .fake
 
 # Project-local CUDA/cuDNN runtime DLLs (downloaded by scripts/get_cuda_runtime.ps1)
@@ -13,5 +14,6 @@ training/
 data/
 *.h5
 *.mp4
-/vendor
+smoke_data/det_out.png
+smoke_data/tts_out/
 yolov8n.pt

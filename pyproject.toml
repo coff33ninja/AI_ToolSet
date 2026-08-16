@@ -96,9 +96,15 @@ tts = [
 [dependency-groups]
 dev = ["ruff"]
 
-[tool.uv]
-  package = false
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ai_toolset*"]
+
+[tool.uv]
   # Cache project-locally on the workspace drive (E:) instead of the default
   # %LOCALAPPDATA%\uv\cache on the system drive. The target drive is a
   # different filesystem, so cross-drive hardlinks are impossible - copy mode
