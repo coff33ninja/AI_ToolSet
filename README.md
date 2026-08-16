@@ -260,6 +260,26 @@ uv run python -m ai_toolset get-models --diarize    # needs a gated HF token
 uv run python -m ai_toolset get-models --rvc model.pth
 ```
 
+### Environment variables (`.env`)
+
+Optional project-local configuration via a `.env` file at the repo root
+(`python-dotenv`, git-ignored). Copy `.env.example`, fill it in, and every
+entry point (CLI, `web`, `ui`) loads it at startup without overriding
+variables you already exported:
+
+```powershell
+Copy-Item .env.example .env
+notepad .env
+```
+
+Supported variables:
+
+| Variable | Purpose |
+|----------|---------|
+| `HF_TOKEN` | Hugging Face token for gated models (pyannote diarization). No more `--token` / `HF_TOKEN` juggling. |
+| `AI_TOOLSET_CUDA_RUNTIME` | Override the CUDA/cuDNN `bin` folder (see "How it works"). |
+| `AI_TOOLSET_CACHE` | Directory for pre-downloaded model caches (default `~/.cache`). |
+
 ## Voice conversion (RVC) and diarization
 
 Two heavy, mutually-exclusive extras. RVC needs `rvc-python` + `fairseq`

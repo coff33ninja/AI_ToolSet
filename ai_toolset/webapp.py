@@ -305,6 +305,10 @@ def main(argv=None):
 
     import uvicorn
 
+    from ai_toolset.env import load_env
+
+    load_env()
+
     parser = argparse.ArgumentParser(
         prog="python -m ai_toolset web",
         description="Serve the AI ToolSet web dashboard.")

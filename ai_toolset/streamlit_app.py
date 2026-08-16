@@ -11,6 +11,10 @@ import tempfile
 
 import streamlit as st
 
+from ai_toolset.env import load_env
+
+load_env()
+
 st.set_page_config(page_title="AI ToolSet Quick UI", page_icon=":material/auto_awesome:",
                    layout="wide")
 

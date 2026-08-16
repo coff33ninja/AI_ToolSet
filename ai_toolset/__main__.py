@@ -795,6 +795,9 @@ def build_parser():
 
 
 def main(argv=None):
+    from ai_toolset.env import load_env
+
+    load_env()
     parser = build_parser()
     args = parser.parse_args(argv)
     return args.func(args)

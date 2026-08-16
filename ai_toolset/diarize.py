@@ -19,7 +19,9 @@ def pipeline_kwargs(token=None, gpus=None):
     the same message whether they are downloading or running diarization.
     """
     from ai_toolset.cuda import set_visible_gpus
+    from ai_toolset.env import load_env
 
+    load_env()
     token = token or os.environ.get("HF_TOKEN") or os.environ.get(
         "HUGGING_FACE_HUB_TOKEN")
     if not token:

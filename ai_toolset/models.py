@@ -56,7 +56,9 @@ def ensure_diarize(token=None, gpus=None):
     access to pyannote/speaker-diarization-3.1 (+ pyannote/segmentation-3.0).
     Accepts the model on your HF account first: huggingface.co/pyannote/..."""
     from ai_toolset.diarize import pipeline_kwargs
+    from ai_toolset.env import load_env
 
+    load_env()
     token = token or os.environ.get("HF_TOKEN")
     if not token:
         raise RuntimeError(

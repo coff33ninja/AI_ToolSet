@@ -6,6 +6,10 @@ __pycache__/
 *.egg-info/
 .fake
 
+# Secrets / local config
+.env
+!.env.example
+
 # Project-local CUDA/cuDNN runtime DLLs (downloaded by scripts/get_cuda_runtime.ps1)
 cuda_runtime/
 
