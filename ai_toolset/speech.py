@@ -160,9 +160,9 @@ def transcribe_live(duration=60, chunk=5, model="base", language=None,
     n = 0
     try:
         while True:
-            tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-            tmp.close()
-            path, seconds = record_mic(tmp.name, duration=chunk, sr=16000)
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                path = tmp.name
+            path, seconds = record_mic(path, duration=chunk, sr=16000)
             if seconds < 0.5:
                 os.remove(tmp.name)
                 if duration <= 0:
@@ -212,8 +212,10 @@ def synthesize_lines(lines, out_dir="tts_output", model_name=
         if metadata_csv:
             meta.append(f"{os.path.basename(out_path)}|{text}")
     if metadata_csv:
-        with open(os.path.join(out_dir, metadata_csv), "w",
-                  encoding="utf-8") as f:
+        meta_path = metadata_csv if os.path.isabs(metadata_csv) else \
+            os.path.join(out_dir, metadata_csv)
+        os.makedirs(os.path.dirname(meta_path) or ".", exist_ok=True)
+        with open(meta_path, "w", encoding="utf-8") as f:
             f.write("\n".join(meta) + "\n")
     return written
 

@@ -163,6 +163,77 @@ uv run python -m ai_toolset tts "Hello from the toolset." out.wav --model tts_mo
 uv run python examples/synthesize_speech.py "Hello" out.wav
 ```
 
+### Batch TTS / narration / fine-tune dataset
+
+Synthesize one wav per line of a text file, with an optional Coqui-format
+`path|text` metadata file for fine-tuning:
+
+```powershell
+uv sync --extra tts
+uv run python -m ai_toolset tts-batch lines.txt --out-dir wavs --metadata metadata.csv --gpus 0
+uv run python -m ai_toolset narrate lines.txt --gpus 0      # synthesize + play each line
+```
+
+## Detection, OCR, and live capture
+
+Another batch of extras, same project-local rules:
+
+```powershell
+uv sync --extra vision --extra ocr     # ultralytics + torchvision; winocr
+```
+
+- `detect` / `detect-live` - YOLO on an image/video or a live screen region
+  (overlay + FPS, `s` saves the frame, `q` quits).
+- `train` - ultralytics YOLO training on your dataset dir.
+- `record-screen` - record a screen region to mp4 (ESC stops).
+- `webcam-capture` - webcam preview; `r` toggles recording, `s` snapshots.
+- `augment` - flip/rotate/color-jitter an image directory (dataset boost).
+- `ocr` - Windows.Media.Ocr via `winocr` (no model downloads), works on an
+  image file or a live screen region.
+
+```powershell
+uv run python -m ai_toolset detect img.png --gpus 0
+uv run python -m ai_toolset detect-live --select-region --gpus 0
+uv run python -m ai_toolset train data.yaml --gpus 0 --epochs 50
+uv run python -m ai_toolset record-screen out.mp4 --select-region --fps 30
+uv run python -m ai_toolset webcam-capture --camera 0
+uv run python -m ai_toolset augment data/images out/ --per-image 5
+uv run python -m ai_toolset ocr screenshot.png --language en
+```
+
+## Voice conversion (RVC) and diarization
+
+Two heavy, mutually-exclusive extras. RVC needs `rvc-python` + `fairseq`
+(vendored, no C++ SDK required); diarization needs the modern pyannote stack.
+**They cannot share one environment** (fairseq -> omegaconf<2.1 vs
+pyannote -> omegaconf>=2.1), so they are declared conflicting and you install
+one profile at a time:
+
+```powershell
+uv sync --extra rvc          # OR
+uv sync --extra diarize
+```
+
+- `voice-convert` - RVC inference with `rvc-python` (needs a `.pth` model +
+  optional index file from your own RVC training).
+- `diarize` - pyannote speaker diarization -> RTTM; requires a Hugging Face
+  token with the gated `pyannote/speaker-diarization-3.1` model accepted.
+
+```powershell
+uv run python -m ai_toolset voice-convert in.wav out.wav --model model.pth --index model.index
+uv run python -m ai_toolset diarize meeting.wav --token hf_... --out meeting.rttm
+```
+
+## Mic capture, live transcription, and benchmarks
+
+```powershell
+uv sync --extra audio --extra stt
+uv run python -m ai_toolset record-audio clip.wav --seconds 10     # or Enter to stop
+uv run python -m ai_toolset live-transcribe --chunk 5 --model base
+uv run python -m ai_toolset benchmark --audio sample.wav --engines faster whisper --gpus 0,1
+uv run python -m ai_toolset benchmark --image frame.png --gpus 0,1  # YOLO latency
+```
+
 ## Scripts
 
 | Script | Purpose |
@@ -194,6 +265,19 @@ uv run python -m ai_toolset capture-loop --out-dir frames --square
 uv run python -m ai_toolset audio-rvc CLEAN/ RVC_DATA/ --speaker 0
 uv run python -m ai_toolset transcribe audio.wav --engine faster --model base --gpus 0
 uv run python -m ai_toolset tts "Hello from the toolset." out.wav --speaker ref.wav
+uv run python -m ai_toolset detect img.png --gpus 0
+uv run python -m ai_toolset train data.yaml --gpus 0
+uv run python -m ai_toolset record-screen out.mp4 --select-region
+uv run python -m ai_toolset webcam-capture --camera 0
+uv run python -m ai_toolset augment data/images out/ --per-image 5
+uv run python -m ai_toolset ocr screenshot.png
+uv run python -m ai_toolset record-audio clip.wav --seconds 10
+uv run python -m ai_toolset live-transcribe --chunk 5
+uv run python -m ai_toolset tts-batch lines.txt --out-dir wavs --metadata metadata.csv
+uv run python -m ai_toolset narrate lines.txt
+uv run python -m ai_toolset benchmark --image frame.png --gpus 0,1
+uv run python -m ai_toolset voice-convert in.wav out.wav --model model.pth   # uv sync --extra rvc
+uv run python -m ai_toolset diarize in.wav --token hf_... --out out.rttm     # uv sync --extra diarize
 ```
 
 ### GPU selection
@@ -229,14 +313,27 @@ uv run python examples/select_gpu.py --gpus 0,1 --framework auto
   `verify_tf_gpu()`, `verify_torch_gpu()`
 - `screen` - `capture(region)`, `capture_square()`, `select_region()`,
   `stream_frames()`
-- `video` - `extract_frames()`, `frames_to_video()`
+- `video` - `extract_frames()`, `frames_to_video()`, `record_screen()`,
+  `webcam_capture()`
 - `images` - `pad_to_square()`, `pad_images_in_dir()`, `split_quadrants()`,
-  `split_image_dataset()`, `xml_to_csv()`
+  `split_image_dataset()`, `xml_to_csv()`, `augment_dir()`
 - `dataset` - `generate_synthetic()` - writes images + keras-retinanet CSV
   labels for pipeline smoke-testing on the GPU
 - `audio` - `probe_dir()`, `resample_dir()`, `split_on_silence()`,
   `make_rvc_dataset()` - voice-cloning dataset prep (requires
-  `uv sync --extra voice`)
+  `uv sync --extra voice`); plus `list_audio_devices()`, `record_mic()`
+- `speech` - `transcribe_whisper()`, `transcribe_faster()`,
+  `transcribe_live()`, `synthesize_tts()`, `synthesize_lines()`,
+  `narrate()`, `play_audio()`
+- `detect` - `detect_image()`, `detect_frame()`, `detect_stream()`,
+  `draw_detections()`, `annotate()` (requires `uv sync --extra vision`)
+- `train` - `train_yolo()`, `best_weights()`
+- `ocr` - `ocr_image()`, `ocr_frame()`, `ocr_screen()` (requires
+  `uv sync --extra ocr`)
+- `voice` - `convert_voice()` RVC inference (requires `uv sync --extra rvc`)
+- `diarize` - `diarize()` pyannote speaker diarization (requires
+  `uv sync --extra diarize`)
+- `benchmark` - `benchmark_stt()`, `benchmark_yolo()`, `print_table()`
 
 See `examples/verify_gpu.py`, `examples/make_synthetic_dataset.py`,
 `examples/select_gpu.py`, and `examples/prepare_voice_dataset.py`.

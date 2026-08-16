@@ -368,10 +368,11 @@ def cmd_benchmark(args):
     if args.audio:
         for engine in args.engines:
             rows.extend(benchmark_stt(args.audio, engine=engine,
-                                      model=args.model, iterations=args.iterations,
+                                      model=args.model or "base",
+                                      iterations=args.iterations,
                                       gpus=gpus))
     if args.image:
-        rows.extend(benchmark_yolo(args.image, weights=args.model,
+        rows.extend(benchmark_yolo(args.image, weights=args.model or "yolov8n.pt",
                                    iterations=args.iterations, gpus=gpus))
     print_table(rows)
     return 0
@@ -650,7 +651,9 @@ def build_parser():
     p.add_argument("--image", help="image file to run YOLO on")
     p.add_argument("--engines", nargs="+", choices=["whisper", "faster"],
                    default=["faster"])
-    p.add_argument("--model", default="base", help="whisper size or YOLO weights")
+    p.add_argument("--model", default=None,
+                   help="whisper size (default: base) or YOLO weights "
+                        "(default: yolov8n.pt)")
     p.add_argument("--iterations", type=int, default=3)
     p.add_argument("--gpus", help="comma-separated physical GPU indices "
                                   "(default: all detected)")
